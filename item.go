@@ -4,29 +4,26 @@ package recommender
 
 import (
 	"fmt"
+	"log"
 
 	uuid "github.com/satori/go.uuid"
 )
 
 type Item struct {
-	Id   uuid.UUID
-	Name string
+	Id      []byte `json:"id"`
+	Name    string `json:"name"`
+	LikedBy []User `json:"likedBy"`
 }
 
 func NewItem(name string) *Item {
-	return &Item{Name: name}
-}
-
-func (i *Item) encode() ([]byte, error) {
-	// TODO
-	return make([]byte, 0), nil
-}
-
-func decode(data []byte) (*Item, error) {
-	// TODO
-	return &Item{}
+	id, err := uuid.NewV4().MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+	return &Item{Id: id, Name: name}
 }
 
 func (i *Item) String() string {
-	return fmt.Sprintf("%s: %s", i.Id.String(), name)
+	return fmt.Sprintf("%s: %s", i.Id, i.Name)
 }

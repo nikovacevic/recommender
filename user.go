@@ -4,29 +4,26 @@ package recommender
 
 import (
 	"fmt"
+	"log"
 
 	uuid "github.com/satori/go.uuid"
 )
 
 type User struct {
-	Id   uuid.UUID
-	Name string
+	Id    []byte `json:"id"`
+	Name  string `json:"name"`
+	Likes []Item `json:"likes"`
 }
 
 func NewUser(name string) *User {
-	return &User{Name: name}
-}
-
-func (i *User) encode() ([]byte, error) {
-	// TODO
-	return make([]byte, 0), nil
-}
-
-func decode(data []byte) (*User, error) {
-	// TODO
-	return &User{}
+	id, err := uuid.NewV4().MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+	return &User{Id: id, Name: name}
 }
 
 func (u *User) String() string {
-	return fmt.Sprintf("%s: %s", u.Id.String(), u.Name)
+	return fmt.Sprintf("%s: %s", u.Id, u.Name)
 }
