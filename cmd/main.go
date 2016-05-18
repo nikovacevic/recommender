@@ -1,6 +1,11 @@
 package main
 
-import "github.com/nikovacevic/recommender"
+import (
+	"fmt"
+	"log"
+
+	"github.com/nikovacevic/recommender"
+)
 
 func main() {
 	rater := recommender.NewRater()
@@ -41,6 +46,18 @@ func main() {
 	rater.AddLike(niko, seattle)
 	rater.AddLike(aubreigh, seattle)
 
+	rater.AddLike(niko, phoenix)
+	rater.AddLike(aubreigh, phoenix)
+
 	rater.AddLike(niko, denver)
 	rater.AddLike(aubreigh, denver)
+
+	items, err := rater.GetItemsByUser(niko)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(len(items))
+	for _, item := range items {
+		fmt.Println(item)
+	}
 }
