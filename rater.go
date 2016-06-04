@@ -1,6 +1,3 @@
-// rater drives the rating system of the recommender. It manages like/dislike
-// data and provides an API for manipulating ratings.
-
 package recommender
 
 import (
@@ -14,7 +11,9 @@ import (
 
 const ratingsDbName string = "ratings.db"
 const userBucketName string = "user"
+const userLikesBucketName string = "userLikes"
 const itemBucketName string = "item"
+const itemLikesBucketName string = "itemLikes"
 
 var traceLog *log.Logger
 
@@ -43,6 +42,14 @@ func NewRater() *Rater {
 		if err != nil {
 			return err
 		}
+		_, err = tx.CreateBucketIfNotExists([]byte(itemLikesBucketName))
+		if err != nil {
+			return err
+		}
+		_, err = tx.CreateBucketIfNotExists([]byte(userLikesBucketName))
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
@@ -64,58 +71,143 @@ func (r *Rater) Close() {
 // nothing happens. Only if the recording fails will this return an error.
 func (r *Rater) AddLike(user *User, item *Item) error {
 	traceLog.Printf("AddLike (%s, %s)\n", user.Name, item.Name)
-	// itemIds used to unmarshal values of key, value pairs, which
-	// are (user ID, [item ID, ...])
-	var itemIds [][]byte
-	// true if (key, value) pair exists in DB
-	exists := false
 
-	// TODO If item does not exist in item bucket, add it
+	// If user doesn't exist, add to user bucket
+	if err := r.addUser(user); err != nil {
+		return err
+	}
 
-	// Return early if user already likes item
-	if err := r.db.View(func(tx *bolt.Tx) error {
-		userBucket := tx.Bucket([]byte(userBucketName))
-		if data := userBucket.Get(user.Id); data != nil {
-			// Get user's item IDs
+	// If item doesn't exist, add to item bucket
+	if err := r.addItem(item); err != nil {
+		return err
+	}
+
+	// TODO Make private method
+	// Add item to user's likes
+	if err := r.db.Update(func(tx *bolt.Tx) error {
+		itemIds := [][]byte{}
+		userLikesBucket := tx.Bucket([]byte(userLikesBucketName))
+		// Find user's liked items
+		if data := userLikesBucket.Get(user.Id); data != nil {
+			// Get user's liked item IDs
 			if err := json.Unmarshal(data, &itemIds); err != nil {
 				return err
 			}
 			// Look for given item ID
 			for _, id := range itemIds {
 				if bytes.Equal(id, item.Id) {
-					exists = true
-					break
+					// If user already likes item, return early
+					traceLog.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
+					return nil
 				}
 			}
 		}
+		// Add item to user's liked items
+		itemIds = append(itemIds, item.Id)
+		data, err := json.Marshal(itemIds)
+		if err != nil {
+			return err
+		}
+		if err := userLikesBucket.Put(user.Id, data); err != nil {
+			return err
+		}
+		traceLog.Printf("Like by (%s, %s) added.\n", item.Name, user.Name)
 		return nil
 	}); err != nil {
 		return err
 	}
-	if exists {
-		traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
+
+	// TODO Return early if the user already likes the item?
+
+	// TODO Make private method
+	// Add user to item's LikedBys
+	if err := r.db.Update(func(tx *bolt.Tx) error {
+		userIds := [][]byte{}
+		itemLikesBucket := tx.Bucket([]byte(itemLikesBucketName))
+		// Find users who like item
+		if data := itemLikesBucket.Get(item.Id); data != nil {
+			// Get item's liked-by user IDs
+			if err := json.Unmarshal(data, &userIds); err != nil {
+				return err
+			}
+			// Look for user ID
+			for _, id := range userIds {
+				if bytes.Equal(id, user.Id) {
+					// If item already liked by user, return early
+					traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
+					return nil
+				}
+			}
+		}
+		// Add user to item's liked-by
+		userIds = append(userIds, user.Id)
+		data, err := json.Marshal(userIds)
+		if err != nil {
+			return err
+		}
+		if err := itemLikesBucket.Put(item.Id, data); err != nil {
+			return err
+		}
+		traceLog.Printf("Like (%s, %s) added.\n", user.Name, item.Name)
 		return nil
+	}); err != nil {
+		return err
 	}
 
-	// Add item to user's Likes
-	if err := r.db.Update(func(tx *bolt.Tx) error {
+	// In series, do the following (first should `go call` the next)
+	// TODO go routine: update similarity indices
+	// TODO go routine: update suggestions
+
+	return nil
+}
+
+func (r *Rater) addUser(user *User) error {
+	err := r.db.Update(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
-		itemIds = append(itemIds, item.Id)
-		data, err := json.Marshal(itemIds)
+		// Return early if user already exists
+		if data := userBucket.Get(user.Id); data != nil {
+			return nil
+		}
+		// Write JSON encoding of user to DB
+		data, err := json.Marshal(user)
 		if err != nil {
 			return err
 		}
 		if err := userBucket.Put(user.Id, data); err != nil {
 			return err
 		}
-		traceLog.Printf("Like (%s, %s) added.\n", user.Name, item.Name)
+		traceLog.Printf("User %s added.\n", user.Name)
 		return nil
-	}); err != nil {
-		log.Panic(err)
+	})
+
+	if err != nil {
+		return err
 	}
+	return nil
+}
 
-	// TODO Add user to item's LikedBys
+func (r *Rater) addItem(item *Item) error {
+	err := r.db.Update(func(tx *bolt.Tx) error {
+		itemBucket := tx.Bucket([]byte(itemBucketName))
+		// Return early if item already exists
+		if data := itemBucket.Get(item.Id); data != nil {
+			return nil
+		}
+		// Write JSON encoding of item to DB
+		data, err := json.Marshal(item)
+		if err != nil {
+			return err
+		}
+		if err := itemBucket.Put(item.Id, data); err != nil {
+			return err
+		}
+		traceLog.Printf("Item %s added.\n", item.Name)
+		return nil
+	})
 
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
