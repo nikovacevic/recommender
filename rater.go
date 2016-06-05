@@ -26,11 +26,11 @@ func init() {
 }
 
 // NewRater returns a new Rater
-func NewRater() *Rater {
+func NewRater() (*Rater, error) {
 	// create key/value store for ratings data
 	db, err := bolt.Open(ratingsDbName, 0600, nil)
 	if err != nil {
-		log.Panic(err)
+		return nil, err
 	}
 	// create buckets for users and items
 	err = db.Update(func(tx *bolt.Tx) error {
@@ -53,9 +53,9 @@ func NewRater() *Rater {
 		return nil
 	})
 	if err != nil {
-		log.Panic(err)
+		return nil, err
 	}
-	return &Rater{db}
+	return &Rater{db}, nil
 }
 
 // Close closes the rater's store connection. Deferring a call to this method
@@ -67,96 +67,127 @@ func (r *Rater) Close() {
 	}
 }
 
+func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
+	var items []Item
+	var itemIds [][]byte
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		// Get item IDs
+		userLikesBucket := tx.Bucket([]byte(userLikesBucketName))
+		data := userLikesBucket.Get(user.Id)
+		if data == nil {
+			return nil
+		}
+		if err := json.Unmarshal(data, &itemIds); err != nil {
+			return err
+		}
+		// Get items by ID
+		for _, id := range itemIds {
+			item, err := r.getItem(id)
+			if err != nil {
+				traceLog.Printf("WARNING: Cannot find item ID=%v\n", id)
+				continue
+			}
+			items = append(items, *item)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *Rater) getItem(id []byte) (*Item, error) {
+	var item Item
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		itemBucket := tx.Bucket([]byte(itemBucketName))
+		if data := itemBucket.Get(id); data != nil {
+			if err := json.Unmarshal(data, &item); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return &item, nil
+}
+
+func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
+	var users []User
+	var userIds [][]byte
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		itemLikeBucket := tx.Bucket([]byte(itemLikesBucketName))
+		// Get user IDs
+		data := itemLikeBucket.Get(item.Id)
+		if data == nil {
+			return nil
+		}
+		if err := json.Unmarshal(data, &userIds); err != nil {
+			return err
+		}
+		// Get users by ID
+		for _, id := range userIds {
+			user, err := r.getUser(id)
+			if err != nil {
+				traceLog.Printf("WARNING: Cannot find user ID=%v\n", id)
+				continue
+			}
+			users = append(users, *user)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+func (r *Rater) getUser(id []byte) (*User, error) {
+	var user User
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		userBucket := tx.Bucket([]byte(userBucketName))
+		if data := userBucket.Get(id); data != nil {
+			if err := json.Unmarshal(data, &user); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 // AddLike records a user liking an item. If the user already likes the item,
 // nothing happens. Only if the recording fails will this return an error.
 func (r *Rater) AddLike(user *User, item *Item) error {
 	traceLog.Printf("AddLike (%s, %s)\n", user.Name, item.Name)
 
-	// If user doesn't exist, add to user bucket
+	// Add user if record does not already exist
 	if err := r.addUser(user); err != nil {
 		return err
 	}
 
-	// If item doesn't exist, add to item bucket
+	// Add item if records does not already exist
 	if err := r.addItem(item); err != nil {
 		return err
 	}
 
-	// TODO Make private method
-	// Add item to user's likes
-	if err := r.db.Update(func(tx *bolt.Tx) error {
-		itemIds := [][]byte{}
-		userLikesBucket := tx.Bucket([]byte(userLikesBucketName))
-		// Find user's liked items
-		if data := userLikesBucket.Get(user.Id); data != nil {
-			// Get user's liked item IDs
-			if err := json.Unmarshal(data, &itemIds); err != nil {
-				return err
-			}
-			// Look for given item ID
-			for _, id := range itemIds {
-				if bytes.Equal(id, item.Id) {
-					// If user already likes item, return early
-					traceLog.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
-					return nil
-				}
-			}
-		}
-		// Add item to user's liked items
-		itemIds = append(itemIds, item.Id)
-		data, err := json.Marshal(itemIds)
-		if err != nil {
-			return err
-		}
-		if err := userLikesBucket.Put(user.Id, data); err != nil {
-			return err
-		}
-		traceLog.Printf("Like by (%s, %s) added.\n", item.Name, user.Name)
-		return nil
-	}); err != nil {
+	// Add like (bi-directional) if records do not already exist.
+	if err := r.addLike(user, item); err != nil {
 		return err
 	}
 
-	// TODO Return early if the user already likes the item?
-
-	// TODO Make private method
-	// Add user to item's LikedBys
-	if err := r.db.Update(func(tx *bolt.Tx) error {
-		userIds := [][]byte{}
-		itemLikesBucket := tx.Bucket([]byte(itemLikesBucketName))
-		// Find users who like item
-		if data := itemLikesBucket.Get(item.Id); data != nil {
-			// Get item's liked-by user IDs
-			if err := json.Unmarshal(data, &userIds); err != nil {
-				return err
-			}
-			// Look for user ID
-			for _, id := range userIds {
-				if bytes.Equal(id, user.Id) {
-					// If item already liked by user, return early
-					traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
-					return nil
-				}
-			}
-		}
-		// Add user to item's liked-by
-		userIds = append(userIds, user.Id)
-		data, err := json.Marshal(userIds)
-		if err != nil {
-			return err
-		}
-		if err := itemLikesBucket.Put(item.Id, data); err != nil {
-			return err
-		}
-		traceLog.Printf("Like (%s, %s) added.\n", user.Name, item.Name)
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	// In series, do the following (first should `go call` the next)
-	// TODO go routine: update similarity indices
-	// TODO go routine: update suggestions
+	// In series:
+	// TODO go update similarity indices
+	// TODO go update suggestions
 
 	return nil
 }
@@ -211,10 +242,76 @@ func (r *Rater) addItem(item *Item) error {
 	return nil
 }
 
+func (r *Rater) addLike(user *User, item *Item) error {
+	// Add item to user's likes
+	if err := r.db.Update(func(tx *bolt.Tx) error {
+		itemIds := [][]byte{}
+		userLikesBucket := tx.Bucket([]byte(userLikesBucketName))
+		// Find user's liked items
+		if data := userLikesBucket.Get(user.Id); data != nil {
+			// Get user's liked item IDs
+			if err := json.Unmarshal(data, &itemIds); err != nil {
+				return err
+			}
+			// Look for given item ID
+			for _, id := range itemIds {
+				if bytes.Equal(id, item.Id) {
+					// If user already likes item, return early
+					traceLog.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
+					return nil
+				}
+			}
+		}
+		// Add item to user's liked items
+		itemIds = append(itemIds, item.Id)
+		data, err := json.Marshal(itemIds)
+		if err != nil {
+			return err
+		}
+		if err := userLikesBucket.Put(user.Id, data); err != nil {
+			return err
+		}
+
+		userIds := [][]byte{}
+		itemLikesBucket := tx.Bucket([]byte(itemLikesBucketName))
+		// Find users who like item
+		if data := itemLikesBucket.Get(item.Id); data != nil {
+			// Get item's liked-by user IDs
+			if err := json.Unmarshal(data, &userIds); err != nil {
+				return err
+			}
+			// Look for user ID
+			for _, id := range userIds {
+				if bytes.Equal(id, user.Id) {
+					// If item already liked by user, return early
+					traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
+					return nil
+				}
+			}
+		}
+		// Add user to item's liked-by
+		userIds = append(userIds, user.Id)
+		data, err = json.Marshal(userIds)
+		if err != nil {
+			return err
+		}
+		if err := itemLikesBucket.Put(item.Id, data); err != nil {
+			return err
+		}
+
+		traceLog.Printf("Like (%s, %s) added.\n", user.Name, item.Name)
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // RemoveLike removes a user's record of liking an item. If the user already
 // does not like the item (which is different than disliking it), then
 // nothing happens. Only if the removal fails will this return an error.
 func (r *Rater) RemoveLike(user *User, item *Item) error {
+	// TODO
 	return nil
 }
 
