@@ -25,5 +25,5 @@ func NewUser(name string) *User {
 }
 
 func (u *User) String() string {
-	return fmt.Sprintf("%s: %s", u.Id, u.Name)
+	return fmt.Sprintf("%s", u.Name)
 }

@@ -25,5 +25,5 @@ func NewItem(name string) *Item {
 }
 
 func (i *Item) String() string {
-	return fmt.Sprintf("%s: %s", i.Id, i.Name)
+	return fmt.Sprintf("%s", i.Name)
 }
