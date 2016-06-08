@@ -17,10 +17,12 @@ const itemLikesBucketName string = "itemLikes"
 
 var traceLog *log.Logger
 
+//
 type Rater struct {
 	db *bolt.DB
 }
 
+//
 func init() {
 	traceLog = log.New(os.Stdout, "TRACE: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
@@ -67,6 +69,7 @@ func (r *Rater) Close() {
 	}
 }
 
+//
 func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
 	var items []Item
 	var itemIds [][]byte
@@ -98,6 +101,7 @@ func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
 	return items, nil
 }
 
+//
 func (r *Rater) getItem(id []byte) (*Item, error) {
 	var item Item
 
@@ -116,6 +120,7 @@ func (r *Rater) getItem(id []byte) (*Item, error) {
 	return &item, nil
 }
 
+//
 func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
 	var users []User
 	var userIds [][]byte
@@ -147,6 +152,7 @@ func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
 	return users, nil
 }
 
+//
 func (r *Rater) getUser(id []byte) (*User, error) {
 	var user User
 
@@ -192,6 +198,7 @@ func (r *Rater) AddLike(user *User, item *Item) error {
 	return nil
 }
 
+//
 func (r *Rater) addUser(user *User) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
@@ -217,6 +224,7 @@ func (r *Rater) addUser(user *User) error {
 	return nil
 }
 
+//
 func (r *Rater) addItem(item *Item) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		itemBucket := tx.Bucket([]byte(itemBucketName))
@@ -242,6 +250,7 @@ func (r *Rater) addItem(item *Item) error {
 	return nil
 }
 
+//
 func (r *Rater) addLike(user *User, item *Item) error {
 	// Add item to user's likes
 	if err := r.db.Update(func(tx *bolt.Tx) error {
@@ -315,6 +324,7 @@ func (r *Rater) RemoveLike(user *User, item *Item) error {
 	return nil
 }
 
+//
 func (r *Rater) GetItemsByUser(user *User) ([]Item, error) {
 	// itemIds used to unmarshal values of (key, value) pairs, which
 	// are (user ID, [item ID, ...])
@@ -353,6 +363,59 @@ func (r *Rater) GetItemsByUser(user *User) ([]Item, error) {
 	return items, nil
 }
 
+//
 func (r *Rater) GetUsersByItem(item *Item) ([]User, error) {
 	return make([]User, 0), nil
+}
+
+//
+func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
+	var users []User
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		userBucket := tx.Bucket([]byte(userBucketName))
+		cur := userBucket.Cursor()
+		i, c := 0, 0
+		for key, val := cur.First(); key != nil && c < count; key, val = cur.Next() {
+			if i >= startAt {
+				var u User
+				if err := json.Unmarshal(val, &u); err != nil {
+					return err
+				}
+				users = append(users, u)
+				c++
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+//
+func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
+	var items []Item
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		itemBucket := tx.Bucket([]byte(itemBucketName))
+		cur := itemBucket.Cursor()
+		i, c := 0, 0
+		for key, val := cur.First(); key != nil && c < count; key, val = cur.Next() {
+			if i > startAt {
+				var i Item
+				if err := json.Unmarshal(val, &i); err != nil {
+					return err
+				}
+				items = append(items, i)
+				c++
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }
