@@ -9,11 +9,13 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-const ratingsDbName string = "ratings.db"
+const dbName string = "recommender.db"
 const userBucketName string = "user"
 const userLikesBucketName string = "userLikes"
 const itemBucketName string = "item"
 const itemLikesBucketName string = "itemLikes"
+const userSimilarsBucketName string = "userSimilars"
+const itemSimilarsBucketName string = "itemSimilars"
 
 var traceLog *log.Logger
 
@@ -22,39 +24,39 @@ type Rater struct {
 	db *bolt.DB
 }
 
-//
 func init() {
 	traceLog = log.New(os.Stdout, "TRACE: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
-// NewRater returns a new Rater
+// NewRater returns a new Rater. The database is opened and buckets are created.
 func NewRater() (*Rater, error) {
-	// create key/value store for ratings data
-	db, err := bolt.Open(ratingsDbName, 0600, nil)
+	// Create key/value store for ratings data
+	db, err := bolt.Open(dbName, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
-	// create buckets for users and items
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err = tx.CreateBucketIfNotExists([]byte(userBucketName))
-		if err != nil {
+	// Create buckets
+	if err := db.Update(func(tx *bolt.Tx) error {
+		if _, err := tx.CreateBucketIfNotExists([]byte(userBucketName)); err != nil {
 			return err
 		}
-		_, err = tx.CreateBucketIfNotExists([]byte(itemBucketName))
-		if err != nil {
+		if _, err := tx.CreateBucketIfNotExists([]byte(itemBucketName)); err != nil {
 			return err
 		}
-		_, err = tx.CreateBucketIfNotExists([]byte(itemLikesBucketName))
-		if err != nil {
+		if _, err := tx.CreateBucketIfNotExists([]byte(itemLikesBucketName)); err != nil {
 			return err
 		}
-		_, err = tx.CreateBucketIfNotExists([]byte(userLikesBucketName))
-		if err != nil {
+		if _, err := tx.CreateBucketIfNotExists([]byte(userLikesBucketName)); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(userSimilarsBucketName)); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(itemSimilarsBucketName)); err != nil {
 			return err
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, err
 	}
 	return &Rater{db}, nil
@@ -69,7 +71,7 @@ func (r *Rater) Close() {
 	}
 }
 
-//
+// GetLikesItems gets Items liked by the given User.
 func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
 	var items []Item
 	var itemIds [][]byte
@@ -101,7 +103,7 @@ func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
 	return items, nil
 }
 
-//
+// getItem retrieves an Item by ID.
 func (r *Rater) getItem(id []byte) (*Item, error) {
 	var item Item
 
@@ -120,7 +122,7 @@ func (r *Rater) getItem(id []byte) (*Item, error) {
 	return &item, nil
 }
 
-//
+// GetUsersWhoLike retrieves the collection of users who like the given Item.
 func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
 	var users []User
 	var userIds [][]byte
@@ -152,7 +154,7 @@ func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
 	return users, nil
 }
 
-//
+// getUser retrieves a User by ID.
 func (r *Rater) getUser(id []byte) (*User, error) {
 	var user User
 
@@ -198,7 +200,7 @@ func (r *Rater) AddLike(user *User, item *Item) error {
 	return nil
 }
 
-//
+// addUser inserts a record in the user bucket if it does not already exist.
 func (r *Rater) addUser(user *User) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
@@ -224,7 +226,7 @@ func (r *Rater) addUser(user *User) error {
 	return nil
 }
 
-//
+// addItem inserts a record in the item bucket if it does not already exist.
 func (r *Rater) addItem(item *Item) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		itemBucket := tx.Bucket([]byte(itemBucketName))
@@ -250,7 +252,8 @@ func (r *Rater) addItem(item *Item) error {
 	return nil
 }
 
-//
+// addLike inserts records in the userLikes and itemLikes buckets for the User
+// and Item. If either record already exists, no action is takes.
 func (r *Rater) addLike(user *User, item *Item) error {
 	// Add item to user's likes
 	if err := r.db.Update(func(tx *bolt.Tx) error {
@@ -324,7 +327,7 @@ func (r *Rater) RemoveLike(user *User, item *Item) error {
 	return nil
 }
 
-//
+// GetItemsByUser retrieves the collection of Items the User likes.
 func (r *Rater) GetItemsByUser(user *User) ([]Item, error) {
 	// itemIds used to unmarshal values of (key, value) pairs, which
 	// are (user ID, [item ID, ...])
@@ -363,12 +366,12 @@ func (r *Rater) GetItemsByUser(user *User) ([]Item, error) {
 	return items, nil
 }
 
-//
+// GetUsersByItem retrieves the collection of Users who like the given Item.
 func (r *Rater) GetUsersByItem(item *Item) ([]User, error) {
 	return make([]User, 0), nil
 }
 
-//
+// GetUsers retrieves a collection of Users.
 func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
 	var users []User
 
@@ -394,7 +397,7 @@ func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
 	return users, nil
 }
 
-//
+// GetItems retrieves a collection of Items.
 func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
 	var items []Item
 
