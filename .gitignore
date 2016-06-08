@@ -1,5 +1,5 @@
 # Commands
-cmd/cmd
+cmd/
 
 # Data Stores
 *.db
