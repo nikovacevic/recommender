@@ -1,7 +1,6 @@
 package recommender
 
 import (
-	"bytes"
 	"encoding/json"
 	"log"
 	"os"
@@ -72,14 +71,14 @@ func (r *Recommender) Close() {
 }
 
 // GetLikesItems gets Items liked by the given User.
-func (r *Recommender) GetLikedItems(user *User) ([]Item, error) {
-	var items []Item
-	var itemIds [][]byte
+func (r *Recommender) GetLikedItems(user *User) (map[string]Item, error) {
+	items := make(map[string]Item)
+	itemIds := make(map[string]bool)
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		// Get item IDs
 		userLikesBucket := tx.Bucket([]byte(userLikesBucketName))
-		data := userLikesBucket.Get(user.Id)
+		data := userLikesBucket.Get([]byte(user.Id))
 		if data == nil {
 			return nil
 		}
@@ -87,13 +86,13 @@ func (r *Recommender) GetLikedItems(user *User) ([]Item, error) {
 			return err
 		}
 		// Get items by ID
-		for _, id := range itemIds {
+		for id, _ := range itemIds {
 			item, err := r.getItem(id)
 			if err != nil {
 				traceLog.Printf("WARNING: Cannot find item ID=%v\n", id)
 				continue
 			}
-			items = append(items, *item)
+			items[id] = *item
 		}
 		return nil
 	}); err != nil {
@@ -104,12 +103,12 @@ func (r *Recommender) GetLikedItems(user *User) ([]Item, error) {
 }
 
 // getItem retrieves an Item by ID.
-func (r *Recommender) getItem(id []byte) (*Item, error) {
+func (r *Recommender) getItem(id string) (*Item, error) {
 	var item Item
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		itemBucket := tx.Bucket([]byte(itemBucketName))
-		if data := itemBucket.Get(id); data != nil {
+		if data := itemBucket.Get([]byte(id)); data != nil {
 			if err := json.Unmarshal(data, &item); err != nil {
 				return err
 			}
@@ -123,14 +122,14 @@ func (r *Recommender) getItem(id []byte) (*Item, error) {
 }
 
 // GetUsersWhoLike retrieves the collection of users who like the given Item.
-func (r *Recommender) GetUsersWhoLike(item *Item) ([]User, error) {
-	var users []User
-	var userIds [][]byte
+func (r *Recommender) GetUsersWhoLike(item *Item) (map[string]User, error) {
+	var users map[string]User
+	var userIds map[string]bool
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		itemLikeBucket := tx.Bucket([]byte(itemLikesBucketName))
 		// Get user IDs
-		data := itemLikeBucket.Get(item.Id)
+		data := itemLikeBucket.Get([]byte(item.Id))
 		if data == nil {
 			return nil
 		}
@@ -138,13 +137,13 @@ func (r *Recommender) GetUsersWhoLike(item *Item) ([]User, error) {
 			return err
 		}
 		// Get users by ID
-		for _, id := range userIds {
+		for id, _ := range userIds {
 			user, err := r.getUser(id)
 			if err != nil {
 				traceLog.Printf("WARNING: Cannot find user ID=%v\n", id)
 				continue
 			}
-			users = append(users, *user)
+			users[id] = *user
 		}
 		return nil
 	}); err != nil {
@@ -155,12 +154,12 @@ func (r *Recommender) GetUsersWhoLike(item *Item) ([]User, error) {
 }
 
 // getUser retrieves a User by ID.
-func (r *Recommender) getUser(id []byte) (*User, error) {
+func (r *Recommender) getUser(id string) (*User, error) {
 	var user User
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
-		if data := userBucket.Get(id); data != nil {
+		if data := userBucket.Get([]byte(id)); data != nil {
 			if err := json.Unmarshal(data, &user); err != nil {
 				return err
 			}
@@ -205,7 +204,7 @@ func (r *Recommender) addUser(user *User) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
 		// Return early if user already exists
-		if data := userBucket.Get(user.Id); data != nil {
+		if data := userBucket.Get([]byte(user.Id)); data != nil {
 			return nil
 		}
 		// Write JSON encoding of user to DB
@@ -213,7 +212,7 @@ func (r *Recommender) addUser(user *User) error {
 		if err != nil {
 			return err
 		}
-		if err := userBucket.Put(user.Id, data); err != nil {
+		if err := userBucket.Put([]byte(user.Id), data); err != nil {
 			return err
 		}
 		traceLog.Printf("User %s added.\n", user.Name)
@@ -231,7 +230,7 @@ func (r *Recommender) addItem(item *Item) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		itemBucket := tx.Bucket([]byte(itemBucketName))
 		// Return early if item already exists
-		if data := itemBucket.Get(item.Id); data != nil {
+		if data := itemBucket.Get([]byte(item.Id)); data != nil {
 			return nil
 		}
 		// Write JSON encoding of item to DB
@@ -239,7 +238,7 @@ func (r *Recommender) addItem(item *Item) error {
 		if err != nil {
 			return err
 		}
-		if err := itemBucket.Put(item.Id, data); err != nil {
+		if err := itemBucket.Put([]byte(item.Id), data); err != nil {
 			return err
 		}
 		traceLog.Printf("Item %s added.\n", item.Name)
@@ -257,57 +256,51 @@ func (r *Recommender) addItem(item *Item) error {
 func (r *Recommender) addLike(user *User, item *Item) error {
 	// Add item to user's likes
 	if err := r.db.Update(func(tx *bolt.Tx) error {
-		itemIds := [][]byte{}
+		itemIds := make(map[string]bool)
 		userLikesBucket := tx.Bucket([]byte(userLikesBucketName))
 		// Find user's liked items
-		if data := userLikesBucket.Get(user.Id); data != nil {
+		if data := userLikesBucket.Get([]byte(user.Id)); data != nil {
 			// Get user's liked item IDs
 			if err := json.Unmarshal(data, &itemIds); err != nil {
 				return err
 			}
-			// Look for given item ID
-			for _, id := range itemIds {
-				if bytes.Equal(id, item.Id) {
-					// If user already likes item, return early
-					traceLog.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
-					return nil
-				}
+			// If user already likes item, return early
+			if itemIds[item.Id] {
+				traceLog.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
+				return nil
 			}
 		}
 		// Add item to user's liked items
-		itemIds = append(itemIds, item.Id)
+		itemIds[item.Id] = true
 		data, err := json.Marshal(itemIds)
 		if err != nil {
 			return err
 		}
-		if err := userLikesBucket.Put(user.Id, data); err != nil {
+		if err := userLikesBucket.Put([]byte(user.Id), data); err != nil {
 			return err
 		}
 
-		userIds := [][]byte{}
+		userIds := make(map[string]bool)
 		itemLikesBucket := tx.Bucket([]byte(itemLikesBucketName))
 		// Find users who like item
-		if data := itemLikesBucket.Get(item.Id); data != nil {
+		if data := itemLikesBucket.Get([]byte(item.Id)); data != nil {
 			// Get item's liked-by user IDs
 			if err := json.Unmarshal(data, &userIds); err != nil {
 				return err
 			}
-			// Look for user ID
-			for _, id := range userIds {
-				if bytes.Equal(id, user.Id) {
-					// If item already liked by user, return early
-					traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
-					return nil
-				}
+			// If item already liked by user, return early
+			if userIds[user.Id] {
+				traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
+				return nil
 			}
 		}
 		// Add user to item's liked-by
-		userIds = append(userIds, user.Id)
+		userIds[user.Id] = true
 		data, err = json.Marshal(userIds)
 		if err != nil {
 			return err
 		}
-		if err := itemLikesBucket.Put(item.Id, data); err != nil {
+		if err := itemLikesBucket.Put([]byte(item.Id), data); err != nil {
 			return err
 		}
 
@@ -325,50 +318,6 @@ func (r *Recommender) addLike(user *User, item *Item) error {
 func (r *Recommender) RemoveLike(user *User, item *Item) error {
 	// TODO
 	return nil
-}
-
-// GetItemsByUser retrieves the collection of Items the User likes.
-func (r *Recommender) GetItemsByUser(user *User) ([]Item, error) {
-	// itemIds used to unmarshal values of (key, value) pairs, which
-	// are (user ID, [item ID, ...])
-	var itemIds [][]byte
-	var items []Item
-	// Get item IDs
-	if err := r.db.View(func(tx *bolt.Tx) error {
-		userBucket := tx.Bucket([]byte(userBucketName))
-		if data := userBucket.Get(user.Id); data != nil {
-			if err := json.Unmarshal(data, &itemIds); err != nil {
-				return err
-			}
-		}
-		return nil
-
-	}); err != nil {
-		return nil, err
-	}
-	// Get Items by itemIds
-	if err := r.db.View(func(tx *bolt.Tx) error {
-		itemBucket := tx.Bucket([]byte(itemBucketName))
-		for _, id := range itemIds {
-			if data := itemBucket.Get(id); data != nil {
-				var item Item
-				if err := json.Unmarshal(data, &item); err != nil {
-					return err
-				}
-				items = append(items, item)
-			}
-		}
-		return nil
-
-	}); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-// GetUsersByItem retrieves the collection of Users who like the given Item.
-func (r *Recommender) GetUsersByItem(item *Item) ([]User, error) {
-	return make([]User, 0), nil
 }
 
 // GetUsers retrieves a collection of Users.
