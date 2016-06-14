@@ -8,7 +8,7 @@ import (
 )
 
 func TestAddLike(t *testing.T) {
-	rater, err := recommender.NewRater()
+	rater, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}

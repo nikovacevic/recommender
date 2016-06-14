@@ -20,7 +20,7 @@ const itemSimilarsBucketName string = "itemSimilars"
 var traceLog *log.Logger
 
 //
-type Rater struct {
+type Recommender struct {
 	db *bolt.DB
 }
 
@@ -28,8 +28,8 @@ func init() {
 	traceLog = log.New(os.Stdout, "TRACE: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
-// NewRater returns a new Rater. The database is opened and buckets are created.
-func NewRater() (*Rater, error) {
+// NewRecommender returns a new Recommender. The database is opened and buckets are created.
+func NewRecommender() (*Recommender, error) {
 	// Create key/value store for ratings data
 	db, err := bolt.Open(dbName, 0600, nil)
 	if err != nil {
@@ -59,12 +59,12 @@ func NewRater() (*Rater, error) {
 	}); err != nil {
 		return nil, err
 	}
-	return &Rater{db}, nil
+	return &Recommender{db}, nil
 }
 
 // Close closes the rater's store connection. Deferring a call to this method
-// is recommended on creation of a Rater.
-func (r *Rater) Close() {
+// is recommended on creation of a Recommender.
+func (r *Recommender) Close() {
 	err := r.db.Close()
 	if err != nil {
 		log.Panic(err)
@@ -72,7 +72,7 @@ func (r *Rater) Close() {
 }
 
 // GetLikesItems gets Items liked by the given User.
-func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
+func (r *Recommender) GetLikedItems(user *User) ([]Item, error) {
 	var items []Item
 	var itemIds [][]byte
 
@@ -104,7 +104,7 @@ func (r *Rater) GetLikedItems(user *User) ([]Item, error) {
 }
 
 // getItem retrieves an Item by ID.
-func (r *Rater) getItem(id []byte) (*Item, error) {
+func (r *Recommender) getItem(id []byte) (*Item, error) {
 	var item Item
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -123,7 +123,7 @@ func (r *Rater) getItem(id []byte) (*Item, error) {
 }
 
 // GetUsersWhoLike retrieves the collection of users who like the given Item.
-func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
+func (r *Recommender) GetUsersWhoLike(item *Item) ([]User, error) {
 	var users []User
 	var userIds [][]byte
 
@@ -155,7 +155,7 @@ func (r *Rater) GetUsersWhoLike(item *Item) ([]User, error) {
 }
 
 // getUser retrieves a User by ID.
-func (r *Rater) getUser(id []byte) (*User, error) {
+func (r *Recommender) getUser(id []byte) (*User, error) {
 	var user User
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -175,7 +175,7 @@ func (r *Rater) getUser(id []byte) (*User, error) {
 
 // AddLike records a user liking an item. If the user already likes the item,
 // nothing happens. Only if the recording fails will this return an error.
-func (r *Rater) AddLike(user *User, item *Item) error {
+func (r *Recommender) AddLike(user *User, item *Item) error {
 	traceLog.Printf("AddLike (%s, %s)\n", user.Name, item.Name)
 
 	// Add user if record does not already exist
@@ -201,7 +201,7 @@ func (r *Rater) AddLike(user *User, item *Item) error {
 }
 
 // addUser inserts a record in the user bucket if it does not already exist.
-func (r *Rater) addUser(user *User) error {
+func (r *Recommender) addUser(user *User) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
 		// Return early if user already exists
@@ -227,7 +227,7 @@ func (r *Rater) addUser(user *User) error {
 }
 
 // addItem inserts a record in the item bucket if it does not already exist.
-func (r *Rater) addItem(item *Item) error {
+func (r *Recommender) addItem(item *Item) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		itemBucket := tx.Bucket([]byte(itemBucketName))
 		// Return early if item already exists
@@ -254,7 +254,7 @@ func (r *Rater) addItem(item *Item) error {
 
 // addLike inserts records in the userLikes and itemLikes buckets for the User
 // and Item. If either record already exists, no action is takes.
-func (r *Rater) addLike(user *User, item *Item) error {
+func (r *Recommender) addLike(user *User, item *Item) error {
 	// Add item to user's likes
 	if err := r.db.Update(func(tx *bolt.Tx) error {
 		itemIds := [][]byte{}
@@ -322,13 +322,13 @@ func (r *Rater) addLike(user *User, item *Item) error {
 // RemoveLike removes a user's record of liking an item. If the user already
 // does not like the item (which is different than disliking it), then
 // nothing happens. Only if the removal fails will this return an error.
-func (r *Rater) RemoveLike(user *User, item *Item) error {
+func (r *Recommender) RemoveLike(user *User, item *Item) error {
 	// TODO
 	return nil
 }
 
 // GetItemsByUser retrieves the collection of Items the User likes.
-func (r *Rater) GetItemsByUser(user *User) ([]Item, error) {
+func (r *Recommender) GetItemsByUser(user *User) ([]Item, error) {
 	// itemIds used to unmarshal values of (key, value) pairs, which
 	// are (user ID, [item ID, ...])
 	var itemIds [][]byte
@@ -367,12 +367,12 @@ func (r *Rater) GetItemsByUser(user *User) ([]Item, error) {
 }
 
 // GetUsersByItem retrieves the collection of Users who like the given Item.
-func (r *Rater) GetUsersByItem(item *Item) ([]User, error) {
+func (r *Recommender) GetUsersByItem(item *Item) ([]User, error) {
 	return make([]User, 0), nil
 }
 
 // GetUsers retrieves a collection of Users.
-func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
+func (r *Recommender) GetUsers(startAt int, count int) ([]User, error) {
 	var users []User
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -398,7 +398,7 @@ func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
 }
 
 // GetItems retrieves a collection of Items.
-func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
+func (r *Recommender) GetItems(startAt int, count int) ([]Item, error) {
 	var items []Item
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
