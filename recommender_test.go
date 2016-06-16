@@ -8,7 +8,7 @@ import (
 )
 
 func TestAddLike(t *testing.T) {
-	rater, err := recommender.NewRecommender()
+	rater, err := recommender.NewRater()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -21,6 +21,8 @@ func TestAddLike(t *testing.T) {
 	phoenix := recommender.NewItem("Phoenix")
 	pittsburgh := recommender.NewItem("Pittsburgh")
 	portland := recommender.NewItem("Portland")
+	losAngeles := recommender.NewItem("Los Angeles")
+	miami := recommender.NewItem("Miami")
 
 	// GetLikedItems should return no items at this point
 	items, err := rater.GetLikedItems(niko)
@@ -41,11 +43,11 @@ func TestAddLike(t *testing.T) {
 	}
 
 	// Add some likes
-	rater.AddLike(niko, phoenix)
-	rater.AddLike(niko, denver)
-	rater.AddLike(niko, pittsburgh)
-	rater.AddLike(aubreigh, phoenix)
-	rater.AddLike(aubreigh, portland)
+	rater.Like(niko, phoenix)
+	rater.Like(niko, denver)
+	rater.Like(niko, pittsburgh)
+	rater.Like(aubreigh, phoenix)
+	rater.Like(aubreigh, portland)
 
 	// Get the liked items
 	items, err = rater.GetLikedItems(niko)
@@ -56,11 +58,16 @@ func TestAddLike(t *testing.T) {
 		t.Errorf("There should be three items. There are %d.", l)
 	}
 
-	// Add some more likes, with a few overlapping
-	rater.AddLike(niko, phoenix)
-	rater.AddLike(niko, portland)
-	rater.AddLike(niko, pittsburgh)
-	rater.AddLike(aubreigh, phoenix)
+	// Add some dislikes
+	rater.Dislike(niko, phoenix)
+	rater.Dislike(niko, miami)
+	rater.Dislike(niko, losAngeles)
+
+	// Add some more likes, with some overlapping and previously disliked
+	rater.Like(niko, phoenix)
+	rater.Like(niko, portland)
+	rater.Like(niko, pittsburgh)
+	rater.Like(aubreigh, phoenix)
 
 	// There should only be one new item, four total
 	items, err = rater.GetLikedItems(niko)
@@ -68,6 +75,67 @@ func TestAddLike(t *testing.T) {
 		t.Errorf("Error: %s", err)
 	}
 	if l := len(items); l != 4 {
-		t.Errorf("There should be four items. There are %d.", l)
+		t.Errorf("There should be four items. There are %d: %v", l, items)
+	}
+}
+
+func TestDisLike(t *testing.T) {
+	rater, err := recommender.NewRater()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rater.Close()
+
+	niko := recommender.NewUser("Niko Kovacevic")
+
+	phoenix := recommender.NewItem("Phoenix")
+	losAngeles := recommender.NewItem("Los Angeles")
+	miami := recommender.NewItem("Miami")
+
+	// GetLikedItems should return no items at this point
+	items, err := rater.GetDislikedItems(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if l := len(items); l != 0 {
+		t.Errorf("There should be zero items. There are %d.", l)
+	}
+
+	// GetUsersWhoDislike should return no users at this point
+	users, err := rater.GetUsersWhoDislike(miami)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if l := len(users); l != 0 {
+		t.Errorf("There should be zero users. There are %d.", l)
+	}
+
+	// Add some dislikes
+	rater.Dislike(niko, phoenix)
+	rater.Dislike(niko, miami)
+
+	// Get the disliked items
+	items, err = rater.GetDislikedItems(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if l := len(items); l != 2 {
+		t.Errorf("There should be two items. There are %d.", l)
+	}
+
+	// Like some items
+	rater.Like(niko, phoenix)
+
+	// Add some more dislikes, with some overlapping and previously liked
+	rater.Dislike(niko, phoenix)
+	rater.Dislike(niko, losAngeles)
+
+	// There should only be one new item, three total
+	items, err = rater.GetDislikedItems(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if l := len(items); l != 3 {
+		t.Errorf("There should be three items. There are %d.", l)
 	}
 }
