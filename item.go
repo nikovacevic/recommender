@@ -6,11 +6,9 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// Item is ___
 type Item struct {
-	Id      string `json:"id"`
-	Name    string `json:"name"`
-	LikedBy []User `json:"likedBy"`
+	Id   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // NewItem creates and returns an Item
@@ -19,6 +17,6 @@ func NewItem(name string) *Item {
 }
 
 // String represents an Item as a string
-func (i *Item) String() string {
+func (i Item) String() string {
 	return fmt.Sprintf("%s", i.Name)
 }

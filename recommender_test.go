@@ -139,3 +139,53 @@ func TestDisLike(t *testing.T) {
 		t.Errorf("There should be three items. There are %d.", l)
 	}
 }
+
+func TestGetRatings(t *testing.T) {
+	rater, err := recommender.NewRater()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rater.Close()
+
+	niko := recommender.NewUser("Niko Kovacevic")
+
+	phoenix := recommender.NewItem("Phoenix")
+	losAngeles := recommender.NewItem("Los Angeles")
+	miami := recommender.NewItem("Miami")
+	pittsburgh := recommender.NewItem("Pittsburgh")
+	boulder := recommender.NewItem("Boulder")
+	seattle := recommender.NewItem("Seattle")
+
+	// GetLikedItems should return no items at this point
+	ratings, err := rater.GetRatings(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if len(ratings) != 0 {
+		t.Errorf("There should be zero items. There are %d.", len(ratings))
+	}
+
+	// Add some likes and dislikes
+	rater.Dislike(niko, phoenix)
+	rater.Dislike(niko, miami)
+	rater.Dislike(niko, losAngeles)
+	rater.Like(niko, pittsburgh)
+	rater.Like(niko, boulder)
+	rater.Like(niko, seattle)
+
+	// There should be six ratings
+	ratings, err = rater.GetRatings(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if len(ratings) != 6 {
+		t.Errorf("There should be six items. There are %d.", len(ratings))
+	}
+
+	/*
+		// Print ratings (notice order varies because of concurrency)
+		for _, rating := range ratings {
+			fmt.Printf("%v\n", rating)
+		}
+	*/
+}

@@ -6,11 +6,10 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-// User is ___
 type User struct {
-	Id    string `json:"id"`
-	Name  string `json:"name"`
-	Likes []Item `json:"likes"`
+	Id      string            `json:"id"`
+	Name    string            `json:"name"`
+	Ratings map[string]Rating `json:"ratings"`
 }
 
 // NewUser creates and returns a new User
@@ -19,6 +18,6 @@ func NewUser(name string) *User {
 }
 
 // String represents a User as a string
-func (u *User) String() string {
+func (u User) String() string {
 	return fmt.Sprintf("%s", u.Name)
 }

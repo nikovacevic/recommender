@@ -4,9 +4,15 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/boltdb/bolt"
 )
+
+//
+type Rater struct {
+	db *bolt.DB
+}
 
 const (
 	dbName                 string = "Rater.db"
@@ -21,11 +27,6 @@ const (
 )
 
 var traceLog *log.Logger
-
-//
-type Rater struct {
-	db *bolt.DB
-}
 
 func init() {
 	traceLog = log.New(os.Stdout, "TRACE: ", log.Ldate|log.Ltime|log.Lshortfile)
@@ -80,7 +81,7 @@ func (r *Rater) Close() {
 	}
 }
 
-// GetLikesItems gets Items liked by the given User.
+// GetLikedItems gets Items liked by the given User.
 func (r *Rater) GetLikedItems(user *User) (map[string]Item, error) {
 	items := make(map[string]Item)
 	itemIds := make(map[string]bool)
@@ -197,6 +198,38 @@ func (r *Rater) GetUsersWhoLike(item *Item) (map[string]User, error) {
 
 // GetUsersWhoDislike retrieves the collection of users who dislike the given Item.
 func (r *Rater) GetUsersWhoDislike(item *Item) (map[string]User, error) {
+	var users map[string]User
+	var userIds map[string]bool
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		itemDislikeBucket := tx.Bucket([]byte(itemDislikesBucketName))
+		// Get user IDs
+		data := itemDislikeBucket.Get([]byte(item.Id))
+		if data == nil {
+			return nil
+		}
+		if err := json.Unmarshal(data, &userIds); err != nil {
+			return err
+		}
+		// Get users by ID
+		for id, _ := range userIds {
+			user, err := r.getUser(id)
+			if err != nil {
+				traceLog.Printf("WARNING: Cannot find user ID=%v\n", id)
+				continue
+			}
+			users[id] = *user
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+// GetUsersWhoRated retrieves the collection of users who rated the given Item.
+func (r *Rater) GetUsersWhoRated(item *Item) (map[string]User, error) {
 	var users map[string]User
 	var userIds map[string]bool
 
@@ -563,14 +596,6 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 	return nil
 }
 
-// RemoveLike removes a user's record of liking an item. If the user already
-// does not like the item (which is different than disliking it), then
-// nothing happens. Only if the removal fails will this return an error.
-func (r *Rater) RemoveLike(user *User, item *Item) error {
-	// TODO
-	return nil
-}
-
 // GetUsers retrieves a collection of Users.
 func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
 	var users []User
@@ -621,4 +646,61 @@ func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
 	}
 
 	return items, nil
+}
+
+// GetRatings retrieves all items a user has rated and returns a map of
+// item ID to Rating, which includes the item and the score the user gave.
+func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
+	ratingCh := make(chan Rating)
+	var wg sync.WaitGroup
+
+	// Retrieve liked items, package them into Rating structs, and pipe
+	// them into the rating channel.
+	wg.Add(1)
+	go func() {
+		items, err := r.GetLikedItems(user)
+		if err != nil {
+			return
+		}
+		for _, item := range items {
+			ratingCh <- Rating{
+				Item:  item,
+				Score: like,
+			}
+		}
+		wg.Done()
+	}()
+
+	// Retrieve disliked items, package them into Rating structs, and pipe
+	// them into the rating channel.
+	wg.Add(1)
+	go func() {
+		items, err := r.GetDislikedItems(user)
+		if err != nil {
+			return
+		}
+		for _, item := range items {
+			ratingCh <- Rating{
+				Item:  item,
+				Score: dislike,
+			}
+		}
+		wg.Done()
+	}()
+
+	// Wait for the like and dislike goroutines to finish, then close the
+	// rating channel
+	go func() {
+		wg.Wait()
+		close(ratingCh)
+	}()
+
+	// As ratings are sent through the rating channel, build out rating
+	// map. Return map when channel closes.
+	ratings := make(map[string]Rating)
+	for rating := range ratingCh {
+		ratings[rating.Item.Id] = rating
+	}
+
+	return ratings, nil
 }
