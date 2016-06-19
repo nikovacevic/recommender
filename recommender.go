@@ -166,8 +166,8 @@ func (r *Rater) getItem(id string) (*Item, error) {
 
 // GetUsersWhoLike retrieves the collection of users who like the given Item.
 func (r *Rater) GetUsersWhoLike(item *Item) (map[string]User, error) {
-	var users map[string]User
-	var userIds map[string]bool
+	users := make(map[string]User)
+	userIds := make(map[string]bool)
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		itemLikeBucket := tx.Bucket([]byte(itemLikesBucketName))
@@ -198,8 +198,8 @@ func (r *Rater) GetUsersWhoLike(item *Item) (map[string]User, error) {
 
 // GetUsersWhoDislike retrieves the collection of users who dislike the given Item.
 func (r *Rater) GetUsersWhoDislike(item *Item) (map[string]User, error) {
-	var users map[string]User
-	var userIds map[string]bool
+	users := make(map[string]User)
+	userIds := make(map[string]bool)
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		itemDislikeBucket := tx.Bucket([]byte(itemDislikesBucketName))
@@ -230,31 +230,47 @@ func (r *Rater) GetUsersWhoDislike(item *Item) (map[string]User, error) {
 
 // GetUsersWhoRated retrieves the collection of users who rated the given Item.
 func (r *Rater) GetUsersWhoRated(item *Item) (map[string]User, error) {
-	var users map[string]User
-	var userIds map[string]bool
+	userCh := make(chan User)
+	var wg sync.WaitGroup
 
-	if err := r.db.View(func(tx *bolt.Tx) error {
-		itemDislikeBucket := tx.Bucket([]byte(itemDislikesBucketName))
-		// Get user IDs
-		data := itemDislikeBucket.Get([]byte(item.Id))
-		if data == nil {
-			return nil
+	// Retrieve users who like the item and pipe them into the channel.
+	wg.Add(1)
+	go func() {
+		users, err := r.GetUsersWhoLike(item)
+		if err != nil {
+			return
 		}
-		if err := json.Unmarshal(data, &userIds); err != nil {
-			return err
+		for _, user := range users {
+			userCh <- user
 		}
-		// Get users by ID
-		for id, _ := range userIds {
-			user, err := r.getUser(id)
-			if err != nil {
-				traceLog.Printf("WARNING: Cannot find user ID=%v\n", id)
-				continue
-			}
-			users[id] = *user
+		wg.Done()
+	}()
+
+	// Retrieve users who dislike the item and pipe them into the channel.
+	wg.Add(1)
+	go func() {
+		users, err := r.GetUsersWhoDislike(item)
+		if err != nil {
+			return
 		}
-		return nil
-	}); err != nil {
-		return nil, err
+		for _, user := range users {
+			userCh <- user
+		}
+		wg.Done()
+	}()
+
+	// Wait for the like and dislike goroutines to finish, then close the
+	// user channel
+	go func() {
+		wg.Wait()
+		close(userCh)
+	}()
+
+	// As users are sent through the channel, build out map. Return map when
+	// channel closes.
+	users := make(map[string]User)
+	for user := range userCh {
+		users[user.Id] = user
 	}
 
 	return users, nil
@@ -703,4 +719,30 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 	}
 
 	return ratings, nil
+}
+
+// GetRatingNeighbors returns a set of users, indexed by user ID, who rated the
+// same items that the given user rated.
+func (r *Rater) GetRatingNeighbors(user *User) (map[string]User, error) {
+	neighbors := make(map[string]User)
+
+	ratings, err := r.GetRatings(user)
+	if err != nil {
+		return nil, err
+	}
+	for _, rating := range ratings {
+		item := rating.Item
+		users, err := r.GetUsersWhoRated(&item)
+		if err != nil {
+			return nil, err
+		}
+		for id, user := range users {
+			neighbors[id] = user
+		}
+	}
+
+	// Delete user from their own set of neighbors
+	delete(neighbors, user.Id)
+
+	return neighbors, nil
 }
