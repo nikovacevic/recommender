@@ -3,7 +3,6 @@ package recommender
 import (
 	"encoding/json"
 	"log"
-	"os"
 	"sync"
 
 	"github.com/boltdb/bolt"
@@ -15,22 +14,16 @@ type Rater struct {
 }
 
 const (
-	dbName                 string = "Rater.db"
-	userBucketName         string = "user"
-	itemBucketName         string = "item"
-	userLikesBucketName    string = "userLikes"
-	itemLikesBucketName    string = "itemLikes"
-	userDislikesBucketName string = "userDislikes"
-	itemDislikesBucketName string = "itemDislikes"
-	userSimilarsBucketName string = "userSimilars"
-	itemSimilarsBucketName string = "itemSimilars"
+	dbName                   string = "recommender.db"
+	userBucketName           string = "user"
+	itemBucketName           string = "item"
+	userLikesBucketName      string = "userLikes"
+	itemLikesBucketName      string = "itemLikes"
+	userDislikesBucketName   string = "userDislikes"
+	itemDislikesBucketName   string = "itemDislikes"
+	userSimilarityBucketName string = "userSimilarity"
+	itemSimilarityBucketName string = "itemSimilarity"
 )
-
-var traceLog *log.Logger
-
-func init() {
-	traceLog = log.New(os.Stdout, "TRACE: ", log.Ldate|log.Ltime|log.Lshortfile)
-}
 
 // NewRater returns a new Rater. The database is opened and buckets are created.
 func NewRater() (*Rater, error) {
@@ -59,10 +52,10 @@ func NewRater() (*Rater, error) {
 		if _, err := tx.CreateBucketIfNotExists([]byte(userDislikesBucketName)); err != nil {
 			return err
 		}
-		if _, err := tx.CreateBucketIfNotExists([]byte(userSimilarsBucketName)); err != nil {
+		if _, err := tx.CreateBucketIfNotExists([]byte(userSimilarityBucketName)); err != nil {
 			return err
 		}
-		if _, err := tx.CreateBucketIfNotExists([]byte(itemSimilarsBucketName)); err != nil {
+		if _, err := tx.CreateBucketIfNotExists([]byte(itemSimilarityBucketName)); err != nil {
 			return err
 		}
 		return nil
@@ -100,7 +93,7 @@ func (r *Rater) GetLikedItems(user *User) (map[string]Item, error) {
 		for id, _ := range itemIds {
 			item, err := r.getItem(id)
 			if err != nil {
-				traceLog.Printf("WARNING: Cannot find item ID=%v\n", id)
+				log.Printf("WARNING: Cannot find item ID=%v\n", id)
 				continue
 			}
 			items[id] = *item
@@ -132,7 +125,7 @@ func (r *Rater) GetDislikedItems(user *User) (map[string]Item, error) {
 		for id, _ := range itemIds {
 			item, err := r.getItem(id)
 			if err != nil {
-				traceLog.Printf("WARNING: Cannot find item ID=%v\n", id)
+				log.Printf("WARNING: Cannot find item ID=%v\n", id)
 				continue
 			}
 			items[id] = *item
@@ -183,7 +176,7 @@ func (r *Rater) GetUsersWhoLike(item *Item) (map[string]User, error) {
 		for id, _ := range userIds {
 			user, err := r.getUser(id)
 			if err != nil {
-				traceLog.Printf("WARNING: Cannot find user ID=%v\n", id)
+				log.Printf("WARNING: Cannot find user ID=%v\n", id)
 				continue
 			}
 			users[id] = *user
@@ -215,7 +208,7 @@ func (r *Rater) GetUsersWhoDislike(item *Item) (map[string]User, error) {
 		for id, _ := range userIds {
 			user, err := r.getUser(id)
 			if err != nil {
-				traceLog.Printf("WARNING: Cannot find user ID=%v\n", id)
+				log.Printf("WARNING: Cannot find user ID=%v\n", id)
 				continue
 			}
 			users[id] = *user
@@ -313,9 +306,16 @@ func (r *Rater) Like(user *User, item *Item) error {
 		return err
 	}
 
-	// In series:
-	// TODO go update similarity indices
-	// TODO go update suggestions
+	// Update similarity index
+	if err := r.UpdateSimilarity(user); err != nil {
+		return err
+	}
+
+	// Update suggestions
+	// TODO
+	if err := r.UpdateSuggestions(user); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -339,9 +339,16 @@ func (r *Rater) Dislike(user *User, item *Item) error {
 		return err
 	}
 
-	// In series:
-	// TODO go update similarity indices
-	// TODO go update suggestions
+	// Update similarity index
+	if err := r.UpdateSimilarity(user); err != nil {
+		return err
+	}
+
+	// Update suggestions
+	// TODO
+	if err := r.UpdateSuggestions(user); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -362,7 +369,7 @@ func (r *Rater) addUser(user *User) error {
 		if err := userBucket.Put([]byte(user.Id), data); err != nil {
 			return err
 		}
-		traceLog.Printf("User %s added.\n", user.Name)
+		// log.Printf("User %s added.\n", user.Name)
 		return nil
 	})
 
@@ -388,7 +395,7 @@ func (r *Rater) addItem(item *Item) error {
 		if err := itemBucket.Put([]byte(item.Id), data); err != nil {
 			return err
 		}
-		traceLog.Printf("Item %s added.\n", item.Name)
+		// log.Printf("Item %s added.\n", item.Name)
 		return nil
 	})
 
@@ -415,7 +422,7 @@ func (r *Rater) addLike(user *User, item *Item) error {
 			}
 			// If user already likes item, return early
 			if itemIds[item.Id] {
-				traceLog.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
+				// log.Printf("Like by (%s, %s) already exists.\n", item.Name, user.Name)
 				return nil
 			}
 		}
@@ -448,6 +455,7 @@ func (r *Rater) addLike(user *User, item *Item) error {
 				if err := userDislikesBucket.Put([]byte(user.Id), data); err != nil {
 					return err
 				}
+				// log.Printf("Disike (%s, %s) removed.\n", user.Name, item.Name)
 			}
 		}
 
@@ -461,7 +469,7 @@ func (r *Rater) addLike(user *User, item *Item) error {
 			}
 			// If item already liked by user, return early
 			if userIds[user.Id] {
-				traceLog.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
+				// log.Printf("Like (%s, %s) already exists.\n", user.Name, item.Name)
 				return nil
 			}
 		}
@@ -477,6 +485,7 @@ func (r *Rater) addLike(user *User, item *Item) error {
 		}
 
 		// Find users who dislike item
+		userIds = make(map[string]bool)
 		itemDislikesBucket := tx.Bucket([]byte(itemDislikesBucketName))
 		if data := itemDislikesBucket.Get([]byte(item.Id)); data != nil {
 			// Get item's liked item IDs
@@ -493,11 +502,11 @@ func (r *Rater) addLike(user *User, item *Item) error {
 				if err := itemDislikesBucket.Put([]byte(user.Id), data); err != nil {
 					return err
 				}
-				traceLog.Printf("Dislike (%s, %s) removed.\n", user.Name, item.Name)
+				// log.Printf("Dislike (%s, %s) removed.\n", user.Name, item.Name)
 			}
 		}
 
-		traceLog.Printf("Like (%s, %s) added.\n", user.Name, item.Name)
+		// log.Printf("Like (%s, %s) added.\n", user.Name, item.Name)
 		return nil
 	}); err != nil {
 		return err
@@ -522,7 +531,7 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 			}
 			// If user already dislikes item, return early
 			if itemIds[item.Id] {
-				traceLog.Printf("Dislike (%s, %s) already exists.\n", item.Name, user.Name)
+				// log.Printf("Dislike (%s, %s) already exists.\n", item.Name, user.Name)
 				return nil
 			}
 		}
@@ -555,7 +564,7 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 				if err := userLikesBucket.Put([]byte(user.Id), data); err != nil {
 					return err
 				}
-				traceLog.Printf("Like (%s, %s) removed.\n", user.Name, item.Name)
+				// log.Printf("Like (%s, %s) removed.\n", user.Name, item.Name)
 			}
 		}
 
@@ -569,7 +578,7 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 			}
 			// If item already disliked by user, return early
 			if userIds[user.Id] {
-				traceLog.Printf("Dislike (%s, %s) already exists.\n", user.Name, item.Name)
+				// log.Printf("Dislike (%s, %s) already exists.\n", user.Name, item.Name)
 				return nil
 			}
 		}
@@ -585,6 +594,7 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 		}
 
 		// Find users who like item
+		userIds = make(map[string]bool)
 		itemLikesBucket := tx.Bucket([]byte(itemLikesBucketName))
 		if data := itemLikesBucket.Get([]byte(item.Id)); data != nil {
 			// Get item's liked item IDs
@@ -601,10 +611,11 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 				if err := itemLikesBucket.Put([]byte(user.Id), data); err != nil {
 					return err
 				}
+				// log.Printf("Like (%s, %s) removed.\n", user.Name, item.Name)
 			}
 		}
 
-		traceLog.Printf("Dislike (%s, %s) added.\n", user.Name, item.Name)
+		// log.Printf("Dislike (%s, %s) added.\n", user.Name, item.Name)
 		return nil
 	}); err != nil {
 		return err
@@ -724,25 +735,161 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 // GetRatingNeighbors returns a set of users, indexed by user ID, who rated the
 // same items that the given user rated.
 func (r *Rater) GetRatingNeighbors(user *User) (map[string]User, error) {
-	neighbors := make(map[string]User)
+	neighborMap := make(map[string]User)
 
+	// Get user's ratings
+	// TODO If user's ratings are already populated, skip this?
+	// user.Ratings == nil did not work as intended
 	ratings, err := r.GetRatings(user)
 	if err != nil {
 		return nil, err
 	}
-	for _, rating := range ratings {
+	user.Ratings = ratings
+
+	// Add to neighborMap users who have also rated each item
+	for _, rating := range user.Ratings {
 		item := rating.Item
-		users, err := r.GetUsersWhoRated(&item)
+		neighbors, err := r.GetUsersWhoRated(&item)
 		if err != nil {
 			return nil, err
 		}
-		for id, user := range users {
-			neighbors[id] = user
+		for id, neighbor := range neighbors {
+			// Skip neighbors that have already been added
+			if _, exists := neighborMap[id]; !exists {
+				// Get the neighbor's ratings
+				neighborRatings, err := r.GetRatings(&neighbor)
+				if err != nil {
+					return nil, err
+				}
+				neighbor.Ratings = neighborRatings
+				// Add neighbor to map
+				neighborMap[id] = neighbor
+			}
 		}
 	}
 
-	// Delete user from their own set of neighbors
-	delete(neighbors, user.Id)
+	// Delete given user from their own set of neighbors
+	delete(neighborMap, user.Id)
 
-	return neighbors, nil
+	return neighborMap, nil
+}
+
+// UpdateSimilarity calculates the similarity index for each user with which the
+// given user has overlapping rated items.
+func (r *Rater) UpdateSimilarity(user *User) error {
+	// Get user's rated items
+	// TODO If user's ratings are already populated, skip this?
+	// user.Ratings == nil did not work as intended
+	ratings, err := r.GetRatings(user)
+	if err != nil {
+		return err
+	}
+	user.Ratings = ratings
+
+	// Get user's neighbors
+	neighbors, err := r.GetRatingNeighbors(user)
+	if err != nil {
+		return err
+	}
+
+	// Compute similarity index for each of user's neighbors
+	// Run each neighbor concurrently, but wait for completion of all
+	var wg sync.WaitGroup
+	similarityCh := make(chan *Similarity)
+	for _, neighbor := range neighbors {
+		wg.Add(1)
+		// Create new instance of neighbor for goroutine
+		neighbor := neighbor
+		go func() {
+			index := r.similarityIndex(user, &neighbor)
+			similarityCh <- &Similarity{
+				User:  neighbor,
+				Index: index,
+			}
+			wg.Done()
+		}()
+	}
+
+	// Close similarity channel when all goroutines complete
+	go func() {
+		wg.Wait()
+		close(similarityCh)
+	}()
+
+	// Map neighbor's user ID to similarity index
+	similarityMap := make(map[string]SimilarityIndex)
+	for similarity := range similarityCh {
+		similarityMap[similarity.User.Id] = similarity.Index
+	}
+
+	// Update database
+	if err := r.updateSimilarityMap(user, similarityMap); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Rater) similarityIndex(user1, user2 *User) SimilarityIndex {
+	var agree, disagree int
+
+	for id, rating1 := range user1.Ratings {
+		if rating2, exists := user2.Ratings[id]; exists {
+			if rating1.Score == rating2.Score {
+				agree++
+			} else {
+				disagree++
+			}
+		}
+	}
+
+	index := float32((agree - disagree)) / float32((agree + disagree))
+
+	return SimilarityIndex(index)
+}
+
+func (r *Rater) updateSimilarityMap(user *User, similarityMap map[string]SimilarityIndex) error {
+	if err := r.db.Update(func(tx *bolt.Tx) error {
+		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
+		// Always overwrite entire similarity map (for now; probably a
+		// better way) because that takes care of deletion of no-longer
+		// similar users (which is only possible if users can remove a
+		// rating, which isn't supported as of this writing).
+		data, err := json.Marshal(similarityMap)
+		if err != nil {
+			return err
+		}
+		// Write entire map to Similarity bucket
+		if err := userSimilarityBucket.Put([]byte(user.Id), data); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
+	similarityMap := make(map[string]Similarity)
+
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
+		if data := userSimilarityBucketName.Get([]byte(user.Id)); data != nil {
+			if err := json.Unmarshal(data, &similarityMap); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return similarityMap, nil
+}
+
+func (r *Rater) UpdateSuggestions(user *User) error {
+	// TODO
+	return nil
 }

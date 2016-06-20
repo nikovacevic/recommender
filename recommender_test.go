@@ -8,7 +8,9 @@ import (
 	"github.com/nikovacevic/recommender"
 )
 
-func TestAddLike(t *testing.T) {
+func TestLike(t *testing.T) {
+	// log.Printf("TestLike")
+
 	rater, err := recommender.NewRater()
 	if err != nil {
 		log.Fatal(err)
@@ -81,6 +83,8 @@ func TestAddLike(t *testing.T) {
 }
 
 func TestDisLike(t *testing.T) {
+	// log.Printf("TestDislike")
+
 	rater, err := recommender.NewRater()
 	if err != nil {
 		log.Fatal(err)
@@ -142,6 +146,8 @@ func TestDisLike(t *testing.T) {
 }
 
 func TestGetRatings(t *testing.T) {
+	// log.Printf("TestGetRatings")
+
 	rater, err := recommender.NewRater()
 	if err != nil {
 		log.Fatal(err)
@@ -192,7 +198,7 @@ func TestGetRatings(t *testing.T) {
 }
 
 func TestGetUsersWhoRated(t *testing.T) {
-	log.Printf("TestGetUsersWhoRated")
+	// log.Printf("TestGetUsersWhoRated")
 
 	rater, err := recommender.NewRater()
 	if err != nil {
@@ -252,7 +258,7 @@ func TestGetUsersWhoRated(t *testing.T) {
 }
 
 func TestGetRatingNeighbors(t *testing.T) {
-	log.Printf("TestGetRatingNeighbors")
+	// log.Printf("TestGetRatingNeighbors")
 
 	rater, err := recommender.NewRater()
 	if err != nil {
@@ -284,6 +290,61 @@ func TestGetRatingNeighbors(t *testing.T) {
 	// Add some likes and dislikes
 	rater.Dislike(niko, phoenix)
 	rater.Dislike(aubreigh, phoenix)
+	rater.Like(johnny, phoenix)
+	rater.Like(amanda, phoenix)
+	rater.Like(niko, pittsburgh)
+	rater.Dislike(aubreigh, pittsburgh)
+	rater.Like(nick, pittsburgh)
+
+	// GetRatingNeighbors should return five users at this point
+	neighbors, err = rater.GetRatingNeighbors(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if len(neighbors) != 4 {
+		t.Errorf("There should be 4 users. There are %d:", len(neighbors))
+		for _, neighbor := range neighbors {
+			fmt.Printf("%v\n", neighbor)
+		}
+	}
+}
+
+func TestSimilarity(t *testing.T) {
+	// log.Printf("TestGetRatingNeighbors")
+
+	rater, err := recommender.NewRater()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rater.Close()
+
+	niko := recommender.NewUser("Niko Kovacevic")
+	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
+	johnny := recommender.NewUser("Johnny Bernard")
+	amanda := recommender.NewUser("Amanda Hunt")
+	nick := recommender.NewUser("Nick Evers")
+
+	phoenix := recommender.NewItem("Phoenix")
+	pittsburgh := recommender.NewItem("Pittsburgh")
+	boulder := recommender.NewItem("Boulder")
+
+	// GetRatingNeighbors should return no users at this point
+	neighbors, err := rater.GetRatingNeighbors(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if len(neighbors) != 0 {
+		t.Errorf("There should be 0 users. There are %d:", len(neighbors))
+		for _, neighbor := range neighbors {
+			fmt.Printf("%v\n", neighbor)
+		}
+	}
+
+	// Add some likes and dislikes
+	rater.Dislike(niko, phoenix)
+	rater.Dislike(aubreigh, phoenix)
+	rater.Like(niko, boulder)
+	rater.Like(aubreigh, boulder)
 	rater.Like(johnny, phoenix)
 	rater.Like(amanda, phoenix)
 	rater.Like(niko, pittsburgh)
