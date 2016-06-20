@@ -817,14 +817,9 @@ func (r *Rater) UpdateSimilarity(user *User) error {
 	}()
 
 	// Map neighbor's user ID to similarity index
-	similarityMap := make(map[string]SimilarityIndex)
 	for similarity := range similarityCh {
-		similarityMap[similarity.User.Id] = similarity.Index
-	}
-
-	// Update database
-	if err := r.updateSimilarityMap(user, similarityMap); err != nil {
-		return err
+		// Update database
+		r.updateSimilarity(user, &similarity.User, similarity.Index)
 	}
 
 	return nil
@@ -848,21 +843,46 @@ func (r *Rater) similarityIndex(user1, user2 *User) SimilarityIndex {
 	return SimilarityIndex(index)
 }
 
-func (r *Rater) updateSimilarityMap(user *User, similarityMap map[string]SimilarityIndex) error {
+func (r *Rater) updateSimilarity(user1 *User, user2 *User, index SimilarityIndex) error {
 	if err := r.db.Update(func(tx *bolt.Tx) error {
 		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
-		// Always overwrite entire similarity map (for now; probably a
-		// better way) because that takes care of deletion of no-longer
-		// similar users (which is only possible if users can remove a
-		// rating, which isn't supported as of this writing).
+
+		// Get user1's existing similarities
+		similarityMap := make(map[string]SimilarityIndex)
+		if data := userSimilarityBucket.Get([]byte(user1.Id)); data != nil {
+			if err := json.Unmarshal(data, &similarityMap); err != nil {
+				return err
+			}
+		}
+		// Set new index
+		similarityMap[user2.Id] = index
 		data, err := json.Marshal(similarityMap)
 		if err != nil {
 			return err
 		}
-		// Write entire map to Similarity bucket
-		if err := userSimilarityBucket.Put([]byte(user.Id), data); err != nil {
+		// Write updated map to bucket
+		if err := userSimilarityBucket.Put([]byte(user1.Id), data); err != nil {
 			return err
 		}
+
+		// Get user2's existing similarities
+		similarityMap = make(map[string]SimilarityIndex)
+		if data := userSimilarityBucket.Get([]byte(user2.Id)); data != nil {
+			if err := json.Unmarshal(data, &similarityMap); err != nil {
+				return err
+			}
+		}
+		// Set new index
+		similarityMap[user1.Id] = index
+		data, err = json.Marshal(similarityMap)
+		if err != nil {
+			return err
+		}
+		// Write updated map to bucket
+		if err := userSimilarityBucket.Put([]byte(user2.Id), data); err != nil {
+			return err
+		}
+
 		return nil
 	}); err != nil {
 		return err
@@ -872,18 +892,30 @@ func (r *Rater) updateSimilarityMap(user *User, similarityMap map[string]Similar
 }
 
 func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
+	similarityIndexMap := make(map[string]SimilarityIndex)
 	similarityMap := make(map[string]Similarity)
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
-		if data := userSimilarityBucketName.Get([]byte(user.Id)); data != nil {
-			if err := json.Unmarshal(data, &similarityMap); err != nil {
+		if data := userSimilarityBucket.Get([]byte(user.Id)); data != nil {
+			if err := json.Unmarshal(data, &similarityIndexMap); err != nil {
 				return err
 			}
 		}
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+
+	for id, index := range similarityIndexMap {
+		u, err := r.getUser(id)
+		if err != nil {
+			return nil, err
+		}
+		similarityMap[id] = Similarity{
+			User:  *u,
+			Index: index,
+		}
 	}
 
 	return similarityMap, nil

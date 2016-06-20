@@ -310,7 +310,7 @@ func TestGetRatingNeighbors(t *testing.T) {
 }
 
 func TestSimilarity(t *testing.T) {
-	// log.Printf("TestGetRatingNeighbors")
+	log.Printf("TestSimilarity")
 
 	rater, err := recommender.NewRater()
 	if err != nil {
@@ -321,45 +321,93 @@ func TestSimilarity(t *testing.T) {
 	niko := recommender.NewUser("Niko Kovacevic")
 	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
 	johnny := recommender.NewUser("Johnny Bernard")
-	amanda := recommender.NewUser("Amanda Hunt")
 	nick := recommender.NewUser("Nick Evers")
 
 	phoenix := recommender.NewItem("Phoenix")
 	pittsburgh := recommender.NewItem("Pittsburgh")
 	boulder := recommender.NewItem("Boulder")
+	losAngeles := recommender.NewItem("Los Angeles")
+	portland := recommender.NewItem("Portland")
+	seattle := recommender.NewItem("Seattle")
 
-	// GetRatingNeighbors should return no users at this point
-	neighbors, err := rater.GetRatingNeighbors(niko)
+	// GetSimilarity should return nothing at this point
+	nikoSims, err := rater.GetSimilarity(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
-	if len(neighbors) != 0 {
-		t.Errorf("There should be 0 users. There are %d:", len(neighbors))
-		for _, neighbor := range neighbors {
-			fmt.Printf("%v\n", neighbor)
+	if len(nikoSims) != 0 {
+		t.Errorf("There should be 0 similarities. There are %d:", len(nikoSims))
+		for _, similarity := range nikoSims {
+			fmt.Printf("%v\n", similarity)
 		}
 	}
 
 	// Add some likes and dislikes
 	rater.Dislike(niko, phoenix)
-	rater.Dislike(aubreigh, phoenix)
-	rater.Like(niko, boulder)
-	rater.Like(aubreigh, boulder)
-	rater.Like(johnny, phoenix)
-	rater.Like(amanda, phoenix)
 	rater.Like(niko, pittsburgh)
-	rater.Dislike(aubreigh, pittsburgh)
-	rater.Like(nick, pittsburgh)
+	rater.Like(niko, boulder)
+	rater.Dislike(niko, losAngeles)
+	rater.Like(niko, portland)
+	rater.Like(niko, seattle)
 
-	// GetRatingNeighbors should return five users at this point
-	neighbors, err = rater.GetRatingNeighbors(niko)
+	rater.Dislike(aubreigh, phoenix)
+	rater.Dislike(aubreigh, pittsburgh)
+	rater.Like(aubreigh, boulder)
+	rater.Like(aubreigh, losAngeles)
+	rater.Like(aubreigh, portland)
+	rater.Like(aubreigh, seattle)
+
+	rater.Like(johnny, phoenix)
+	rater.Like(johnny, losAngeles)
+
+	rater.Like(nick, pittsburgh)
+	rater.Like(nick, portland)
+
+	// GetSimilarity should return three similarities at this point
+	nikoSims, err = rater.GetSimilarity(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
-	if len(neighbors) != 4 {
-		t.Errorf("There should be 4 users. There are %d:", len(neighbors))
-		for _, neighbor := range neighbors {
-			fmt.Printf("%v\n", neighbor)
+	if len(nikoSims) != 3 {
+		t.Errorf("There should be 3 similarities. There are %d:", len(nikoSims))
+		for _, similarity := range nikoSims {
+			fmt.Printf("%v\n", similarity)
 		}
+	}
+
+	// Get other users's similarities
+	aubreighSims, err := rater.GetSimilarity(aubreigh)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	nickSims, err := rater.GetSimilarity(nick)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	johnnySims, err := rater.GetSimilarity(johnny)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+
+	// Test commutativity
+	if nikoSims[aubreigh.Id].Index != aubreighSims[niko.Id].Index {
+		t.Errorf("Similarity(Niko, Aubreigh) should equaul Similarity(Aubreigh, Niko).")
+	}
+	if nikoSims[nick.Id].Index != nickSims[niko.Id].Index {
+		t.Errorf("Similarity(Niko, Nick) should equaul Similarity(Nick, Niko).")
+	}
+	if nikoSims[johnny.Id].Index != johnnySims[niko.Id].Index {
+		t.Errorf("Similarity(Niko, Johnny) should equaul Similarity(Johnny, Niko).")
+	}
+
+	// Test values
+	if float32(nikoSims[aubreigh.Id].Index) != float32(2.0/6.0) {
+		t.Errorf("Similarity(Niko, Aubreigh) should be %f. Actually %f", float32(2.0/6.0), nikoSims[aubreigh.Id])
+	}
+	if float32(nikoSims[nick.Id].Index) != float32(1) {
+		t.Errorf("Similarity(Niko, Nick) should be %f. Actually %f", 1, nikoSims[nick.Id])
+	}
+	if float32(nikoSims[johnny.Id].Index) != float32(-1) {
+		t.Errorf("Similarity(Niko, Johnny) should be %f. Actually %f", -1, nikoSims[johnny.Id])
 	}
 }
