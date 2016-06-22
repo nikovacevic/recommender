@@ -8,7 +8,6 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-//
 type Rater struct {
 	db *bolt.DB
 }
@@ -675,9 +674,8 @@ func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
 	return items, nil
 }
 
-// GetRatings retrieves all items a user has rated and returns a map of
-// item ID to Rating, which includes the item and the score the user gave.
-func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
+// channelRatings retrieves a collection of Items.
+func (r *Rater) channelRatings(user *User) (<-chan Rating, error) {
 	ratingCh := make(chan Rating)
 	var wg sync.WaitGroup
 
@@ -685,6 +683,7 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 	// them into the rating channel.
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		items, err := r.GetLikedItems(user)
 		if err != nil {
 			return
@@ -695,13 +694,13 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 				Score: like,
 			}
 		}
-		wg.Done()
 	}()
 
 	// Retrieve disliked items, package them into Rating structs, and pipe
 	// them into the rating channel.
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		items, err := r.GetDislikedItems(user)
 		if err != nil {
 			return
@@ -712,7 +711,6 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 				Score: dislike,
 			}
 		}
-		wg.Done()
 	}()
 
 	// Wait for the like and dislike goroutines to finish, then close the
@@ -722,9 +720,19 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 		close(ratingCh)
 	}()
 
+	return ratingCh, nil
+}
+
+// GetRatings retrieves all items a user has rated and returns a map of
+// item ID to Rating, which includes the item and the score the user gave.
+func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 	// As ratings are sent through the rating channel, build out rating
 	// map. Return map when channel closes.
 	ratings := make(map[string]Rating)
+	ratingCh, err := r.channelRatings(user)
+	if err != nil {
+		return nil, err
+	}
 	for rating := range ratingCh {
 		ratings[rating.Item.Id] = rating
 	}
@@ -825,6 +833,8 @@ func (r *Rater) UpdateSimilarity(user *User) error {
 	return nil
 }
 
+// similarityIndex calculates the current similarity index based on the ratings
+// in each user's Ratings
 func (r *Rater) similarityIndex(user1, user2 *User) SimilarityIndex {
 	var agree, disagree int
 
@@ -843,6 +853,7 @@ func (r *Rater) similarityIndex(user1, user2 *User) SimilarityIndex {
 	return SimilarityIndex(index)
 }
 
+// updateSimilarity updates the similarity index for the given users
 func (r *Rater) updateSimilarity(user1 *User, user2 *User, index SimilarityIndex) error {
 	if err := r.db.Update(func(tx *bolt.Tx) error {
 		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
@@ -891,9 +902,10 @@ func (r *Rater) updateSimilarity(user1 *User, user2 *User, index SimilarityIndex
 	return nil
 }
 
-func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
+// channelSimilarity returns a channel of the given user's similarities
+func (r *Rater) channelSimilarity(user *User) (<-chan Similarity, error) {
+	similarityCh := make(chan Similarity)
 	similarityIndexMap := make(map[string]SimilarityIndex)
-	similarityMap := make(map[string]Similarity)
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
@@ -907,21 +919,62 @@ func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
 		return nil, err
 	}
 
-	for id, index := range similarityIndexMap {
-		u, err := r.getUser(id)
-		if err != nil {
-			return nil, err
+	go func() {
+		for id, index := range similarityIndexMap {
+			u, err := r.getUser(id)
+			if err != nil {
+				close(similarityCh)
+				return
+			}
+			similarityCh <- Similarity{
+				User:  *u,
+				Index: index,
+			}
 		}
-		similarityMap[id] = Similarity{
-			User:  *u,
-			Index: index,
-		}
-	}
+		close(similarityCh)
+	}()
 
+	return similarityCh, nil
+}
+
+// GetSimilarity returns a map the given user's similarities, keyed by their
+// similar user's ID
+func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
+	similarityMap := make(map[string]Similarity)
+	similarityCh, err := r.channelSimilarity(user)
+	if err != nil {
+		return nil, err
+	}
+	for similarity := range similarityCh {
+		similarityMap[similarity.User.Id] = similarity
+	}
 	return similarityMap, nil
 }
 
+//
 func (r *Rater) UpdateSuggestions(user *User) error {
-	// TODO
+	// Get similarities for user
+	// user.Similars = similars bucket GET user.Id
+
+	// For each similarity, get similar user's rated items, but only items
+	// user has not rated.
+	// itemCh := chan Item
+	// FOR similar RANGE user.Similars
+	//// IF similar.Item NOT IN user.Ratings
+	////// itemCh <- item
+
+	// FOR similar RANGE user.Similars
+	//// FOR rating RANGE similar.User.GetRatings()
+	////// IF rating.Item.Id NOT IN user.Ratings
+	//////// index :=
+	//////// items PUSH rating.Item
+
+	// suggestions := map[Item.Id]Suggestion
+	// FOR _ RANGE _
+	//// index := (Zl - Zd) / (Nl + Nd)
+	//// suggestions PUT Suggestion{item, index} AT item.Id
+
+	// suggestion bucket PUT suggestions AT user.Id
+
 	return nil
 }
