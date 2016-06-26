@@ -581,8 +581,4 @@ func TestSuggestions(t *testing.T) {
 			fmt.Printf("%v\n", suggestion)
 		}
 	}
-
-	for _, suggestion := range nikoSuggestions {
-		fmt.Printf("%v\n", suggestion)
-	}
 }
