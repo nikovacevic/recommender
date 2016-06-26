@@ -310,7 +310,7 @@ func TestGetRatingNeighbors(t *testing.T) {
 }
 
 func TestSimilarity(t *testing.T) {
-	log.Printf("TestSimilarity")
+	//log.Printf("TestSimilarity")
 
 	rater, err := recommender.NewRater()
 	if err != nil {
@@ -409,5 +409,180 @@ func TestSimilarity(t *testing.T) {
 	}
 	if float32(nikoSims[johnny.Id].Index) != float32(-1) {
 		t.Errorf("Similarity(Niko, Johnny) should be %f. Actually %f", -1, nikoSims[johnny.Id])
+	}
+}
+
+func TestSuggestions(t *testing.T) {
+	log.Printf("TestSuggestions")
+
+	rater, err := recommender.NewRater()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rater.Close()
+
+	niko := recommender.NewUser("Niko Kovacevic")
+	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
+	johnny := recommender.NewUser("Johnny Bernard")
+	amanda := recommender.NewUser("Amanda Hunt")
+	nick := recommender.NewUser("Nick Evers")
+	katie := recommender.NewUser("Katie Yoder")
+	matt := recommender.NewUser("Matt Rolland")
+	bekah := recommender.NewUser("Bekah Sandoval")
+	bill := recommender.NewUser("Bill Taggart")
+	megan := recommender.NewUser("Megan Murzyn")
+
+	ashland := recommender.NewItem("Ashland, Oregon")
+	austin := recommender.NewItem("Austin, Texas")
+	boulder := recommender.NewItem("Boulder, Colorado")
+	denver := recommender.NewItem("Denver, Colorado")
+	flagstaff := recommender.NewItem("Flagstaff, Arizona")
+	houston := recommender.NewItem("Houston, Texas")
+	lasVegas := recommender.NewItem("Las Vegas, Nevada")
+	losAngeles := recommender.NewItem("Los Angeles, California")
+	newYork := recommender.NewItem("New York, New York")
+	philadelphia := recommender.NewItem("Philadelphia, Pennsylvania")
+	phoenix := recommender.NewItem("Phoenix, Arizona")
+	pittsburgh := recommender.NewItem("Pittsburgh, Pennsylvania")
+	portlandOR := recommender.NewItem("Portland, Oregon")
+	portlandME := recommender.NewItem("Portland, Maine")
+	princeton := recommender.NewItem("Princeton, New Jersey")
+	sacramento := recommender.NewItem("Sacramento, California")
+	sanFrancisco := recommender.NewItem("San Francisco, California")
+	santaFe := recommender.NewItem("Santa Fe, New Mexico")
+	seattle := recommender.NewItem("Seattle, Washington")
+	tacoma := recommender.NewItem("Tacoma, Washington")
+	tucson := recommender.NewItem("Tucson, Arizona")
+
+	// GetSuggestions should return nothing at this point
+	nikoSuggestions, err := rater.GetSuggestions(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if len(nikoSuggestions) != 0 {
+		t.Errorf("There should be 0 suggestions. There are %d:", len(nikoSuggestions))
+		for _, suggestion := range nikoSuggestions {
+			fmt.Printf("%v\n", suggestion)
+		}
+	}
+
+	// Add some likes and dislikes
+	rater.Like(niko, boulder)
+	rater.Like(niko, pittsburgh)
+	rater.Like(niko, seattle)
+	rater.Dislike(niko, lasVegas)
+	rater.Dislike(niko, losAngeles)
+	rater.Dislike(niko, phoenix)
+
+	rater.Like(aubreigh, ashland)
+	rater.Like(aubreigh, boulder)
+	rater.Like(aubreigh, denver)
+	rater.Like(aubreigh, flagstaff)
+	rater.Like(aubreigh, losAngeles)
+	rater.Like(aubreigh, portlandOR)
+	rater.Like(aubreigh, sanFrancisco)
+	rater.Like(aubreigh, seattle)
+	rater.Dislike(aubreigh, lasVegas)
+	rater.Dislike(aubreigh, phoenix)
+	rater.Dislike(aubreigh, pittsburgh)
+	rater.Dislike(aubreigh, tacoma)
+
+	rater.Like(johnny, phoenix)
+	rater.Like(johnny, flagstaff)
+	rater.Like(johnny, losAngeles)
+	rater.Like(johnny, sanFrancisco)
+	rater.Like(johnny, lasVegas)
+	rater.Like(johnny, portlandME)
+	rater.Dislike(johnny, sacramento)
+	rater.Dislike(johnny, santaFe)
+
+	rater.Like(amanda, losAngeles)
+	rater.Like(amanda, flagstaff)
+	rater.Like(amanda, sanFrancisco)
+	rater.Like(amanda, portlandME)
+	rater.Like(amanda, santaFe)
+	rater.Dislike(amanda, lasVegas)
+	rater.Dislike(amanda, phoenix)
+	rater.Dislike(amanda, sacramento)
+
+	rater.Like(nick, pittsburgh)
+	rater.Like(nick, portlandOR)
+	rater.Like(nick, seattle)
+	rater.Like(nick, ashland)
+	rater.Like(nick, austin)
+	rater.Dislike(nick, houston)
+	rater.Dislike(nick, philadelphia)
+
+	rater.Like(katie, portlandOR)
+	rater.Like(katie, seattle)
+	rater.Like(katie, ashland)
+	rater.Like(katie, austin)
+	rater.Like(katie, houston)
+	rater.Dislike(katie, pittsburgh)
+
+	rater.Like(matt, flagstaff)
+	rater.Like(matt, tucson)
+	rater.Like(matt, denver)
+	rater.Like(matt, boulder)
+	rater.Like(matt, portlandOR)
+	rater.Like(matt, santaFe)
+	rater.Like(matt, newYork)
+	rater.Dislike(matt, phoenix)
+	rater.Dislike(matt, losAngeles)
+	rater.Dislike(matt, lasVegas)
+
+	rater.Like(bekah, flagstaff)
+	rater.Like(bekah, tucson)
+	rater.Like(bekah, denver)
+	rater.Like(bekah, boulder)
+	rater.Like(bekah, portlandOR)
+	rater.Like(bekah, tacoma)
+	rater.Like(bekah, seattle)
+	rater.Like(bekah, newYork)
+	rater.Dislike(bekah, phoenix)
+	rater.Dislike(bekah, losAngeles)
+	rater.Dislike(bekah, lasVegas)
+	rater.Dislike(bekah, sacramento)
+
+	rater.Like(bill, flagstaff)
+	rater.Like(bill, denver)
+	rater.Like(bill, portlandOR)
+	rater.Like(bill, philadelphia)
+	rater.Like(bill, princeton)
+	rater.Like(bill, newYork)
+	rater.Like(bill, phoenix)
+	rater.Like(bill, losAngeles)
+	rater.Like(bill, lasVegas)
+	rater.Dislike(bill, tucson)
+	rater.Dislike(bill, santaFe)
+	rater.Dislike(bill, pittsburgh)
+	rater.Dislike(bill, seattle)
+	rater.Dislike(bill, boulder)
+
+	rater.Like(megan, flagstaff)
+	rater.Like(megan, philadelphia)
+	rater.Like(megan, princeton)
+	rater.Like(megan, newYork)
+	rater.Like(megan, phoenix)
+	rater.Dislike(megan, tucson)
+
+	if err := rater.UpdateSuggestions(niko); err != nil {
+		t.Errorf("Error: %s", err)
+	}
+
+	// GetSuggestions should return nothing at this point
+	nikoSuggestions, err = rater.GetSuggestions(niko)
+	if err != nil {
+		t.Errorf("Error: %s", err)
+	}
+	if len(nikoSuggestions) != 15 {
+		t.Errorf("There should be 15 suggestions. There are %d:", len(nikoSuggestions))
+		for _, suggestion := range nikoSuggestions {
+			fmt.Printf("%v\n", suggestion)
+		}
+	}
+
+	for _, suggestion := range nikoSuggestions {
+		fmt.Printf("%v\n", suggestion)
 	}
 }

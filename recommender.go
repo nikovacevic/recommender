@@ -22,6 +22,7 @@ const (
 	itemDislikesBucketName   string = "itemDislikes"
 	userSimilarityBucketName string = "userSimilarity"
 	itemSimilarityBucketName string = "itemSimilarity"
+	suggestionBucketName     string = "suggestionBucket"
 )
 
 // NewRater returns a new Rater. The database is opened and buckets are created.
@@ -55,6 +56,9 @@ func NewRater() (*Rater, error) {
 			return err
 		}
 		if _, err := tx.CreateBucketIfNotExists([]byte(itemSimilarityBucketName)); err != nil {
+			return err
+		}
+		if _, err := tx.CreateBucketIfNotExists([]byte(suggestionBucketName)); err != nil {
 			return err
 		}
 		return nil
@@ -951,30 +955,116 @@ func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
 	return similarityMap, nil
 }
 
-//
+// UpdateSuggestions generates a set of Suggestions (items with corresponding
+// suggestion index) for the given user.
 func (r *Rater) UpdateSuggestions(user *User) error {
+	//log.Printf("UpdateSuggestions(%s)\n", user.Name)
+
 	// Get similarities for user
-	// user.Similars = similars bucket GET user.Id
+	similarityMap, err := r.GetSimilarity(user)
+	if err != nil {
+		return err
+	}
 
 	// For each similarity, get similar user's rated items, but only items
 	// user has not rated.
-	// itemCh := chan Item
-	// FOR similar RANGE user.Similars
-	//// IF similar.Item NOT IN user.Ratings
-	////// itemCh <- item
+	itemCh := make(chan Item)
+	var wg sync.WaitGroup
+	for _, similarity := range similarityMap {
+		wg.Add(1)
+		// Create new instance of similarity for goroutine
+		similarity := similarity
+		go func() {
+			// Get similar user's ratings
+			ratingsCh, err := r.channelRatings(&(similarity.User))
+			if err != nil {
+				return
+			}
+			// For each rated item, if user has not rated the item,
+			// send it into itemCh
+			for r := range ratingsCh {
+				if _, exists := user.Ratings[r.Item.Id]; !exists {
+					itemCh <- r.Item
+				}
+			}
+			wg.Done()
+		}()
+	}
 
-	// FOR similar RANGE user.Similars
-	//// FOR rating RANGE similar.User.GetRatings()
-	////// IF rating.Item.Id NOT IN user.Ratings
-	//////// index :=
-	//////// items PUSH rating.Item
+	go func() {
+		defer close(itemCh)
+		wg.Wait()
+	}()
 
-	// suggestions := map[Item.Id]Suggestion
-	// FOR _ RANGE _
-	//// index := (Zl - Zd) / (Nl + Nd)
-	//// suggestions PUT Suggestion{item, index} AT item.Id
+	// For each item, suggestion index = (zL-zD)/total, where zL is the sum
+	// of the similarity indices of users who like the item, zD is the sum
+	// of the similarity indices of users who dislike the item, and total is
+	// the total number of users composing zL and zD.
+	// TODO Can we optimize this?
+	suggestionMap := make(map[string]Suggestion)
+	for item := range itemCh {
+		// Get all users who have rated the item, separated into like
+		// and dislike.
+		likeUsers, err := r.GetUsersWhoLike(&item)
+		if err != nil {
+			return err
+		}
+		dislikeUsers, err := r.GetUsersWhoDislike(&item)
+		if err != nil {
+			return err
+		}
+		// Scan each similar user for a like/dislike score. If one
+		// exists, increment index parameters.
+		var zL, zD, total float32
+		for id, similarity := range similarityMap {
+			if _, exists := likeUsers[id]; exists {
+				zL += float32(similarity.Index)
+				total++
+			} else if _, exists := dislikeUsers[id]; exists {
+				zD += float32(similarity.Index)
+				total++
+			}
+		}
+		// Build Suggestion, then add it to the map
+		index := (zL - zD) / total
+		suggestionMap[item.Id] = Suggestion{
+			Item:  item,
+			Index: SuggestionIndex(index),
+		}
+	}
 
-	// suggestion bucket PUT suggestions AT user.Id
+	// Save the suggestion map, keyed by the user's Id
+	if err := r.db.Update(func(tx *bolt.Tx) error {
+		suggestionBucket := tx.Bucket([]byte(suggestionBucketName))
+		data, err := json.Marshal(suggestionMap)
+		if err != nil {
+			return err
+		}
+		if err := suggestionBucket.Put([]byte(user.Id), data); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+// GetSuggestions retrieves the set of Suggestions for the given user.
+func (r *Rater) GetSuggestions(user *User) (map[string]Suggestion, error) {
+	suggestionMap := make(map[string]Suggestion)
+	if err := r.db.View(func(tx *bolt.Tx) error {
+		suggestionBucket := tx.Bucket([]byte(suggestionBucketName))
+		if data := suggestionBucket.Get([]byte(user.Id)); data != nil {
+			if err := json.Unmarshal(data, &suggestionMap); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return suggestionMap, nil
 }
