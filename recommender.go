@@ -8,7 +8,7 @@ import (
 	"github.com/boltdb/bolt"
 )
 
-type Rater struct {
+type Recommender struct {
 	db *bolt.DB
 }
 
@@ -25,8 +25,8 @@ const (
 	suggestionBucketName     string = "suggestionBucket"
 )
 
-// NewRater returns a new Rater. The database is opened and buckets are created.
-func NewRater() (*Rater, error) {
+// NewRecommender returns a new Recommender. The database is opened and buckets are created.
+func NewRecommender() (*Recommender, error) {
 	// Create key/value store for ratings data
 	db, err := bolt.Open(dbName, 0600, nil)
 	if err != nil {
@@ -65,12 +65,12 @@ func NewRater() (*Rater, error) {
 	}); err != nil {
 		return nil, err
 	}
-	return &Rater{db}, nil
+	return &Recommender{db}, nil
 }
 
-// Close closes the Rater's store connection. Deferring a call to this method
-// is recommended on creation of a Rater.
-func (r *Rater) Close() {
+// Close closes the Recommender's store connection. Deferring a call to this method
+// is recommended on creation of a Recommender.
+func (r *Recommender) Close() {
 	err := r.db.Close()
 	if err != nil {
 		log.Panic(err)
@@ -78,7 +78,7 @@ func (r *Rater) Close() {
 }
 
 // GetLikedItems gets Items liked by the given User.
-func (r *Rater) GetLikedItems(user *User) (map[string]Item, error) {
+func (r *Recommender) GetLikedItems(user *User) (map[string]Item, error) {
 	items := make(map[string]Item)
 	itemIds := make(map[string]bool)
 
@@ -110,7 +110,7 @@ func (r *Rater) GetLikedItems(user *User) (map[string]Item, error) {
 }
 
 // GetDislikedItems gets Items disliked by the given User.
-func (r *Rater) GetDislikedItems(user *User) (map[string]Item, error) {
+func (r *Recommender) GetDislikedItems(user *User) (map[string]Item, error) {
 	items := make(map[string]Item)
 	itemIds := make(map[string]bool)
 
@@ -142,7 +142,7 @@ func (r *Rater) GetDislikedItems(user *User) (map[string]Item, error) {
 }
 
 // getItem retrieves an Item by ID.
-func (r *Rater) getItem(id string) (*Item, error) {
+func (r *Recommender) getItem(id string) (*Item, error) {
 	var item Item
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -161,7 +161,7 @@ func (r *Rater) getItem(id string) (*Item, error) {
 }
 
 // GetUsersWhoLike retrieves the collection of users who like the given Item.
-func (r *Rater) GetUsersWhoLike(item *Item) (map[string]User, error) {
+func (r *Recommender) GetUsersWhoLike(item *Item) (map[string]User, error) {
 	users := make(map[string]User)
 	userIds := make(map[string]bool)
 
@@ -193,7 +193,7 @@ func (r *Rater) GetUsersWhoLike(item *Item) (map[string]User, error) {
 }
 
 // GetUsersWhoDislike retrieves the collection of users who dislike the given Item.
-func (r *Rater) GetUsersWhoDislike(item *Item) (map[string]User, error) {
+func (r *Recommender) GetUsersWhoDislike(item *Item) (map[string]User, error) {
 	users := make(map[string]User)
 	userIds := make(map[string]bool)
 
@@ -225,7 +225,7 @@ func (r *Rater) GetUsersWhoDislike(item *Item) (map[string]User, error) {
 }
 
 // GetUsersWhoRated retrieves the collection of users who rated the given Item.
-func (r *Rater) GetUsersWhoRated(item *Item) (map[string]User, error) {
+func (r *Recommender) GetUsersWhoRated(item *Item) (map[string]User, error) {
 	userCh := make(chan User)
 	var wg sync.WaitGroup
 
@@ -273,7 +273,7 @@ func (r *Rater) GetUsersWhoRated(item *Item) (map[string]User, error) {
 }
 
 // getUser retrieves a User by ID.
-func (r *Rater) getUser(id string) (*User, error) {
+func (r *Recommender) getUser(id string) (*User, error) {
 	var user User
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -293,7 +293,7 @@ func (r *Rater) getUser(id string) (*User, error) {
 
 // Like records a user liking an item. If the user already likes the item,
 // nothing happens. Only if the recording fails will this return an error.
-func (r *Rater) Like(user *User, item *Item) error {
+func (r *Recommender) Like(user *User, item *Item) error {
 	// Add user if record does not already exist
 	if err := r.addUser(user); err != nil {
 		return err
@@ -326,7 +326,7 @@ func (r *Rater) Like(user *User, item *Item) error {
 // Dislike records a user disliking an item. If the user already dislikes the
 // item, nothing happens. If the user likes the item, the like is removed first.
 // Only if the recording fails will this return an error.
-func (r *Rater) Dislike(user *User, item *Item) error {
+func (r *Recommender) Dislike(user *User, item *Item) error {
 	// Add user if record does not already exist
 	if err := r.addUser(user); err != nil {
 		return err
@@ -357,7 +357,7 @@ func (r *Rater) Dislike(user *User, item *Item) error {
 }
 
 // addUser inserts a record in the user bucket if it does not already exist.
-func (r *Rater) addUser(user *User) error {
+func (r *Recommender) addUser(user *User) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		userBucket := tx.Bucket([]byte(userBucketName))
 		// Return early if user already exists
@@ -383,7 +383,7 @@ func (r *Rater) addUser(user *User) error {
 }
 
 // addItem inserts a record in the item bucket if it does not already exist.
-func (r *Rater) addItem(item *Item) error {
+func (r *Recommender) addItem(item *Item) error {
 	err := r.db.Update(func(tx *bolt.Tx) error {
 		itemBucket := tx.Bucket([]byte(itemBucketName))
 		// Return early if item already exists
@@ -411,7 +411,7 @@ func (r *Rater) addItem(item *Item) error {
 // addLike inserts records in the userLikes and itemLikes buckets for the User
 // and Item. If a dislike exists, both such records are deleted. If the like
 // records already exists, no action is taken.
-func (r *Rater) addLike(user *User, item *Item) error {
+func (r *Recommender) addLike(user *User, item *Item) error {
 	// Add item to user's likes
 	if err := r.db.Update(func(tx *bolt.Tx) error {
 		itemIds := make(map[string]bool)
@@ -520,7 +520,7 @@ func (r *Rater) addLike(user *User, item *Item) error {
 // addDislike inserts records in the userDislikes and itemDislikes buckets for
 // the User and Item. If a like exists, both such records are deleted. If the
 // dislike records already exists, no action is taken.
-func (r *Rater) addDislike(user *User, item *Item) error {
+func (r *Recommender) addDislike(user *User, item *Item) error {
 	// Add item to user's dislikes
 	if err := r.db.Update(func(tx *bolt.Tx) error {
 		itemIds := make(map[string]bool)
@@ -627,7 +627,7 @@ func (r *Rater) addDislike(user *User, item *Item) error {
 }
 
 // GetUsers retrieves a collection of Users.
-func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
+func (r *Recommender) GetUsers(startAt int, count int) ([]User, error) {
 	var users []User
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -653,7 +653,7 @@ func (r *Rater) GetUsers(startAt int, count int) ([]User, error) {
 }
 
 // GetItems retrieves a collection of Items.
-func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
+func (r *Recommender) GetItems(startAt int, count int) ([]Item, error) {
 	var items []Item
 
 	if err := r.db.View(func(tx *bolt.Tx) error {
@@ -679,7 +679,7 @@ func (r *Rater) GetItems(startAt int, count int) ([]Item, error) {
 }
 
 // channelRatings retrieves a collection of Items.
-func (r *Rater) channelRatings(user *User) (<-chan Rating, error) {
+func (r *Recommender) channelRatings(user *User) (<-chan Rating, error) {
 	ratingCh := make(chan Rating)
 	var wg sync.WaitGroup
 
@@ -729,7 +729,7 @@ func (r *Rater) channelRatings(user *User) (<-chan Rating, error) {
 
 // GetRatings retrieves all items a user has rated and returns a map of
 // item ID to Rating, which includes the item and the score the user gave.
-func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
+func (r *Recommender) GetRatings(user *User) (map[string]Rating, error) {
 	// As ratings are sent through the rating channel, build out rating
 	// map. Return map when channel closes.
 	ratings := make(map[string]Rating)
@@ -746,7 +746,7 @@ func (r *Rater) GetRatings(user *User) (map[string]Rating, error) {
 
 // GetRatingNeighbors returns a set of users, indexed by user ID, who rated the
 // same items that the given user rated.
-func (r *Rater) GetRatingNeighbors(user *User) (map[string]User, error) {
+func (r *Recommender) GetRatingNeighbors(user *User) (map[string]User, error) {
 	neighborMap := make(map[string]User)
 
 	// Get user's ratings
@@ -788,7 +788,7 @@ func (r *Rater) GetRatingNeighbors(user *User) (map[string]User, error) {
 
 // UpdateSimilarity calculates the similarity index for each user with which the
 // given user has overlapping rated items.
-func (r *Rater) UpdateSimilarity(user *User) error {
+func (r *Recommender) UpdateSimilarity(user *User) error {
 	// Get user's rated items
 	// TODO If user's ratings are already populated, skip this?
 	// user.Ratings == nil did not work as intended
@@ -839,7 +839,7 @@ func (r *Rater) UpdateSimilarity(user *User) error {
 
 // similarityIndex calculates the current similarity index based on the ratings
 // in each user's Ratings
-func (r *Rater) similarityIndex(user1, user2 *User) SimilarityIndex {
+func (r *Recommender) similarityIndex(user1, user2 *User) SimilarityIndex {
 	var agree, disagree int
 
 	for id, rating1 := range user1.Ratings {
@@ -858,7 +858,7 @@ func (r *Rater) similarityIndex(user1, user2 *User) SimilarityIndex {
 }
 
 // updateSimilarity updates the similarity index for the given users
-func (r *Rater) updateSimilarity(user1 *User, user2 *User, index SimilarityIndex) error {
+func (r *Recommender) updateSimilarity(user1 *User, user2 *User, index SimilarityIndex) error {
 	if err := r.db.Update(func(tx *bolt.Tx) error {
 		userSimilarityBucket := tx.Bucket([]byte(userSimilarityBucketName))
 
@@ -907,7 +907,7 @@ func (r *Rater) updateSimilarity(user1 *User, user2 *User, index SimilarityIndex
 }
 
 // channelSimilarity returns a channel of the given user's similarities
-func (r *Rater) channelSimilarity(user *User) (<-chan Similarity, error) {
+func (r *Recommender) channelSimilarity(user *User) (<-chan Similarity, error) {
 	similarityCh := make(chan Similarity)
 	similarityIndexMap := make(map[string]SimilarityIndex)
 
@@ -943,7 +943,7 @@ func (r *Rater) channelSimilarity(user *User) (<-chan Similarity, error) {
 
 // GetSimilarity returns a map the given user's similarities, keyed by their
 // similar user's ID
-func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
+func (r *Recommender) GetSimilarity(user *User) (map[string]Similarity, error) {
 	similarityMap := make(map[string]Similarity)
 	similarityCh, err := r.channelSimilarity(user)
 	if err != nil {
@@ -957,7 +957,7 @@ func (r *Rater) GetSimilarity(user *User) (map[string]Similarity, error) {
 
 // UpdateSuggestions generates a set of Suggestions (items with corresponding
 // suggestion index) for the given user.
-func (r *Rater) UpdateSuggestions(user *User) error {
+func (r *Recommender) UpdateSuggestions(user *User) error {
 	//log.Printf("UpdateSuggestions(%s)\n", user.Name)
 
 	// Get similarities for user
@@ -1052,7 +1052,7 @@ func (r *Rater) UpdateSuggestions(user *User) error {
 }
 
 // GetSuggestions retrieves the set of Suggestions for the given user.
-func (r *Rater) GetSuggestions(user *User) (map[string]Suggestion, error) {
+func (r *Recommender) GetSuggestions(user *User) (map[string]Suggestion, error) {
 	suggestionMap := make(map[string]Suggestion)
 	if err := r.db.View(func(tx *bolt.Tx) error {
 		suggestionBucket := tx.Bucket([]byte(suggestionBucketName))

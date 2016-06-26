@@ -11,11 +11,11 @@ import (
 func TestLike(t *testing.T) {
 	// log.Printf("TestLike")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
@@ -28,7 +28,7 @@ func TestLike(t *testing.T) {
 	miami := recommender.NewItem("Miami")
 
 	// GetLikedItems should return no items at this point
-	items, err := rater.GetLikedItems(niko)
+	items, err := r.GetLikedItems(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -37,7 +37,7 @@ func TestLike(t *testing.T) {
 	}
 
 	// GetUsersWhoLike should return no users at this point
-	users, err := rater.GetUsersWhoLike(portland)
+	users, err := r.GetUsersWhoLike(portland)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -46,14 +46,14 @@ func TestLike(t *testing.T) {
 	}
 
 	// Add some likes
-	rater.Like(niko, phoenix)
-	rater.Like(niko, denver)
-	rater.Like(niko, pittsburgh)
-	rater.Like(aubreigh, phoenix)
-	rater.Like(aubreigh, portland)
+	r.Like(niko, phoenix)
+	r.Like(niko, denver)
+	r.Like(niko, pittsburgh)
+	r.Like(aubreigh, phoenix)
+	r.Like(aubreigh, portland)
 
 	// Get the liked items
-	items, err = rater.GetLikedItems(niko)
+	items, err = r.GetLikedItems(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -62,18 +62,18 @@ func TestLike(t *testing.T) {
 	}
 
 	// Add some dislikes
-	rater.Dislike(niko, phoenix)
-	rater.Dislike(niko, miami)
-	rater.Dislike(niko, losAngeles)
+	r.Dislike(niko, phoenix)
+	r.Dislike(niko, miami)
+	r.Dislike(niko, losAngeles)
 
 	// Add some more likes, with some overlapping and previously disliked
-	rater.Like(niko, phoenix)
-	rater.Like(niko, portland)
-	rater.Like(niko, pittsburgh)
-	rater.Like(aubreigh, phoenix)
+	r.Like(niko, phoenix)
+	r.Like(niko, portland)
+	r.Like(niko, pittsburgh)
+	r.Like(aubreigh, phoenix)
 
 	// There should only be one new item, 4 total
-	items, err = rater.GetLikedItems(niko)
+	items, err = r.GetLikedItems(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -85,11 +85,11 @@ func TestLike(t *testing.T) {
 func TestDisLike(t *testing.T) {
 	// log.Printf("TestDislike")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 
@@ -98,7 +98,7 @@ func TestDisLike(t *testing.T) {
 	miami := recommender.NewItem("Miami")
 
 	// GetLikedItems should return no items at this point
-	items, err := rater.GetDislikedItems(niko)
+	items, err := r.GetDislikedItems(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -107,7 +107,7 @@ func TestDisLike(t *testing.T) {
 	}
 
 	// GetUsersWhoDislike should return no users at this point
-	users, err := rater.GetUsersWhoDislike(miami)
+	users, err := r.GetUsersWhoDislike(miami)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -116,11 +116,11 @@ func TestDisLike(t *testing.T) {
 	}
 
 	// Add some dislikes
-	rater.Dislike(niko, phoenix)
-	rater.Dislike(niko, miami)
+	r.Dislike(niko, phoenix)
+	r.Dislike(niko, miami)
 
 	// Get the disliked items
-	items, err = rater.GetDislikedItems(niko)
+	items, err = r.GetDislikedItems(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -129,14 +129,14 @@ func TestDisLike(t *testing.T) {
 	}
 
 	// Like some items
-	rater.Like(niko, phoenix)
+	r.Like(niko, phoenix)
 
 	// Add some more dislikes, with some overlapping and previously liked
-	rater.Dislike(niko, phoenix)
-	rater.Dislike(niko, losAngeles)
+	r.Dislike(niko, phoenix)
+	r.Dislike(niko, losAngeles)
 
 	// There should only be one new item, 3 total
-	items, err = rater.GetDislikedItems(niko)
+	items, err = r.GetDislikedItems(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -148,11 +148,11 @@ func TestDisLike(t *testing.T) {
 func TestGetRatings(t *testing.T) {
 	// log.Printf("TestGetRatings")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 
@@ -164,7 +164,7 @@ func TestGetRatings(t *testing.T) {
 	seattle := recommender.NewItem("Seattle")
 
 	// GetLikedItems should return no items at this point
-	ratings, err := rater.GetRatings(niko)
+	ratings, err := r.GetRatings(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -173,15 +173,15 @@ func TestGetRatings(t *testing.T) {
 	}
 
 	// Add some likes and dislikes
-	rater.Dislike(niko, phoenix)
-	rater.Dislike(niko, miami)
-	rater.Dislike(niko, losAngeles)
-	rater.Like(niko, pittsburgh)
-	rater.Like(niko, boulder)
-	rater.Like(niko, seattle)
+	r.Dislike(niko, phoenix)
+	r.Dislike(niko, miami)
+	r.Dislike(niko, losAngeles)
+	r.Like(niko, pittsburgh)
+	r.Like(niko, boulder)
+	r.Like(niko, seattle)
 
 	// There should be six ratings
-	ratings, err = rater.GetRatings(niko)
+	ratings, err = r.GetRatings(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -200,11 +200,11 @@ func TestGetRatings(t *testing.T) {
 func TestGetUsersWhoRated(t *testing.T) {
 	// log.Printf("TestGetUsersWhoRated")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
@@ -216,7 +216,7 @@ func TestGetUsersWhoRated(t *testing.T) {
 	pittsburgh := recommender.NewItem("Pittsburgh")
 
 	// GetUsersWhoRated should return no users at this point
-	users, err := rater.GetUsersWhoRated(pittsburgh)
+	users, err := r.GetUsersWhoRated(pittsburgh)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -225,15 +225,15 @@ func TestGetUsersWhoRated(t *testing.T) {
 	}
 
 	// Add some likes and dislikes
-	rater.Dislike(niko, phoenix)
-	rater.Dislike(aubreigh, phoenix)
-	rater.Like(johnny, phoenix)
-	rater.Like(amanda, phoenix)
-	rater.Like(niko, pittsburgh)
-	rater.Like(nick, pittsburgh)
+	r.Dislike(niko, phoenix)
+	r.Dislike(aubreigh, phoenix)
+	r.Like(johnny, phoenix)
+	r.Like(amanda, phoenix)
+	r.Like(niko, pittsburgh)
+	r.Like(nick, pittsburgh)
 
 	// GetUsersWhoRated should return 4 users at this point
-	users, err = rater.GetUsersWhoRated(phoenix)
+	users, err = r.GetUsersWhoRated(phoenix)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -245,7 +245,7 @@ func TestGetUsersWhoRated(t *testing.T) {
 	}
 
 	// GetUsersWhoRated should return 2 users at this point
-	users, err = rater.GetUsersWhoRated(pittsburgh)
+	users, err = r.GetUsersWhoRated(pittsburgh)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -260,11 +260,11 @@ func TestGetUsersWhoRated(t *testing.T) {
 func TestGetRatingNeighbors(t *testing.T) {
 	// log.Printf("TestGetRatingNeighbors")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
@@ -276,7 +276,7 @@ func TestGetRatingNeighbors(t *testing.T) {
 	pittsburgh := recommender.NewItem("Pittsburgh")
 
 	// GetRatingNeighbors should return no users at this point
-	neighbors, err := rater.GetRatingNeighbors(niko)
+	neighbors, err := r.GetRatingNeighbors(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -288,16 +288,16 @@ func TestGetRatingNeighbors(t *testing.T) {
 	}
 
 	// Add some likes and dislikes
-	rater.Dislike(niko, phoenix)
-	rater.Dislike(aubreigh, phoenix)
-	rater.Like(johnny, phoenix)
-	rater.Like(amanda, phoenix)
-	rater.Like(niko, pittsburgh)
-	rater.Dislike(aubreigh, pittsburgh)
-	rater.Like(nick, pittsburgh)
+	r.Dislike(niko, phoenix)
+	r.Dislike(aubreigh, phoenix)
+	r.Like(johnny, phoenix)
+	r.Like(amanda, phoenix)
+	r.Like(niko, pittsburgh)
+	r.Dislike(aubreigh, pittsburgh)
+	r.Like(nick, pittsburgh)
 
 	// GetRatingNeighbors should return five users at this point
-	neighbors, err = rater.GetRatingNeighbors(niko)
+	neighbors, err = r.GetRatingNeighbors(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -312,11 +312,11 @@ func TestGetRatingNeighbors(t *testing.T) {
 func TestSimilarity(t *testing.T) {
 	//log.Printf("TestSimilarity")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
@@ -331,7 +331,7 @@ func TestSimilarity(t *testing.T) {
 	seattle := recommender.NewItem("Seattle")
 
 	// GetSimilarity should return nothing at this point
-	nikoSims, err := rater.GetSimilarity(niko)
+	nikoSims, err := r.GetSimilarity(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -343,28 +343,28 @@ func TestSimilarity(t *testing.T) {
 	}
 
 	// Add some likes and dislikes
-	rater.Dislike(niko, phoenix)
-	rater.Like(niko, pittsburgh)
-	rater.Like(niko, boulder)
-	rater.Dislike(niko, losAngeles)
-	rater.Like(niko, portland)
-	rater.Like(niko, seattle)
+	r.Dislike(niko, phoenix)
+	r.Like(niko, pittsburgh)
+	r.Like(niko, boulder)
+	r.Dislike(niko, losAngeles)
+	r.Like(niko, portland)
+	r.Like(niko, seattle)
 
-	rater.Dislike(aubreigh, phoenix)
-	rater.Dislike(aubreigh, pittsburgh)
-	rater.Like(aubreigh, boulder)
-	rater.Like(aubreigh, losAngeles)
-	rater.Like(aubreigh, portland)
-	rater.Like(aubreigh, seattle)
+	r.Dislike(aubreigh, phoenix)
+	r.Dislike(aubreigh, pittsburgh)
+	r.Like(aubreigh, boulder)
+	r.Like(aubreigh, losAngeles)
+	r.Like(aubreigh, portland)
+	r.Like(aubreigh, seattle)
 
-	rater.Like(johnny, phoenix)
-	rater.Like(johnny, losAngeles)
+	r.Like(johnny, phoenix)
+	r.Like(johnny, losAngeles)
 
-	rater.Like(nick, pittsburgh)
-	rater.Like(nick, portland)
+	r.Like(nick, pittsburgh)
+	r.Like(nick, portland)
 
 	// GetSimilarity should return three similarities at this point
-	nikoSims, err = rater.GetSimilarity(niko)
+	nikoSims, err = r.GetSimilarity(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -376,15 +376,15 @@ func TestSimilarity(t *testing.T) {
 	}
 
 	// Get other users's similarities
-	aubreighSims, err := rater.GetSimilarity(aubreigh)
+	aubreighSims, err := r.GetSimilarity(aubreigh)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
-	nickSims, err := rater.GetSimilarity(nick)
+	nickSims, err := r.GetSimilarity(nick)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
-	johnnySims, err := rater.GetSimilarity(johnny)
+	johnnySims, err := r.GetSimilarity(johnny)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -415,11 +415,11 @@ func TestSimilarity(t *testing.T) {
 func TestSuggestions(t *testing.T) {
 	log.Printf("TestSuggestions")
 
-	rater, err := recommender.NewRater()
+	r, err := recommender.NewRecommender()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer rater.Close()
+	defer r.Close()
 
 	niko := recommender.NewUser("Niko Kovacevic")
 	aubreigh := recommender.NewUser("Aubreigh Brunschwig")
@@ -455,7 +455,7 @@ func TestSuggestions(t *testing.T) {
 	tucson := recommender.NewItem("Tucson, Arizona")
 
 	// GetSuggestions should return nothing at this point
-	nikoSuggestions, err := rater.GetSuggestions(niko)
+	nikoSuggestions, err := r.GetSuggestions(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
@@ -467,111 +467,111 @@ func TestSuggestions(t *testing.T) {
 	}
 
 	// Add some likes and dislikes
-	rater.Like(niko, boulder)
-	rater.Like(niko, pittsburgh)
-	rater.Like(niko, seattle)
-	rater.Dislike(niko, lasVegas)
-	rater.Dislike(niko, losAngeles)
-	rater.Dislike(niko, phoenix)
+	r.Like(niko, boulder)
+	r.Like(niko, pittsburgh)
+	r.Like(niko, seattle)
+	r.Dislike(niko, lasVegas)
+	r.Dislike(niko, losAngeles)
+	r.Dislike(niko, phoenix)
 
-	rater.Like(aubreigh, ashland)
-	rater.Like(aubreigh, boulder)
-	rater.Like(aubreigh, denver)
-	rater.Like(aubreigh, flagstaff)
-	rater.Like(aubreigh, losAngeles)
-	rater.Like(aubreigh, portlandOR)
-	rater.Like(aubreigh, sanFrancisco)
-	rater.Like(aubreigh, seattle)
-	rater.Dislike(aubreigh, lasVegas)
-	rater.Dislike(aubreigh, phoenix)
-	rater.Dislike(aubreigh, pittsburgh)
-	rater.Dislike(aubreigh, tacoma)
+	r.Like(aubreigh, ashland)
+	r.Like(aubreigh, boulder)
+	r.Like(aubreigh, denver)
+	r.Like(aubreigh, flagstaff)
+	r.Like(aubreigh, losAngeles)
+	r.Like(aubreigh, portlandOR)
+	r.Like(aubreigh, sanFrancisco)
+	r.Like(aubreigh, seattle)
+	r.Dislike(aubreigh, lasVegas)
+	r.Dislike(aubreigh, phoenix)
+	r.Dislike(aubreigh, pittsburgh)
+	r.Dislike(aubreigh, tacoma)
 
-	rater.Like(johnny, phoenix)
-	rater.Like(johnny, flagstaff)
-	rater.Like(johnny, losAngeles)
-	rater.Like(johnny, sanFrancisco)
-	rater.Like(johnny, lasVegas)
-	rater.Like(johnny, portlandME)
-	rater.Dislike(johnny, sacramento)
-	rater.Dislike(johnny, santaFe)
+	r.Like(johnny, phoenix)
+	r.Like(johnny, flagstaff)
+	r.Like(johnny, losAngeles)
+	r.Like(johnny, sanFrancisco)
+	r.Like(johnny, lasVegas)
+	r.Like(johnny, portlandME)
+	r.Dislike(johnny, sacramento)
+	r.Dislike(johnny, santaFe)
 
-	rater.Like(amanda, losAngeles)
-	rater.Like(amanda, flagstaff)
-	rater.Like(amanda, sanFrancisco)
-	rater.Like(amanda, portlandME)
-	rater.Like(amanda, santaFe)
-	rater.Dislike(amanda, lasVegas)
-	rater.Dislike(amanda, phoenix)
-	rater.Dislike(amanda, sacramento)
+	r.Like(amanda, losAngeles)
+	r.Like(amanda, flagstaff)
+	r.Like(amanda, sanFrancisco)
+	r.Like(amanda, portlandME)
+	r.Like(amanda, santaFe)
+	r.Dislike(amanda, lasVegas)
+	r.Dislike(amanda, phoenix)
+	r.Dislike(amanda, sacramento)
 
-	rater.Like(nick, pittsburgh)
-	rater.Like(nick, portlandOR)
-	rater.Like(nick, seattle)
-	rater.Like(nick, ashland)
-	rater.Like(nick, austin)
-	rater.Dislike(nick, houston)
-	rater.Dislike(nick, philadelphia)
+	r.Like(nick, pittsburgh)
+	r.Like(nick, portlandOR)
+	r.Like(nick, seattle)
+	r.Like(nick, ashland)
+	r.Like(nick, austin)
+	r.Dislike(nick, houston)
+	r.Dislike(nick, philadelphia)
 
-	rater.Like(katie, portlandOR)
-	rater.Like(katie, seattle)
-	rater.Like(katie, ashland)
-	rater.Like(katie, austin)
-	rater.Like(katie, houston)
-	rater.Dislike(katie, pittsburgh)
+	r.Like(katie, portlandOR)
+	r.Like(katie, seattle)
+	r.Like(katie, ashland)
+	r.Like(katie, austin)
+	r.Like(katie, houston)
+	r.Dislike(katie, pittsburgh)
 
-	rater.Like(matt, flagstaff)
-	rater.Like(matt, tucson)
-	rater.Like(matt, denver)
-	rater.Like(matt, boulder)
-	rater.Like(matt, portlandOR)
-	rater.Like(matt, santaFe)
-	rater.Like(matt, newYork)
-	rater.Dislike(matt, phoenix)
-	rater.Dislike(matt, losAngeles)
-	rater.Dislike(matt, lasVegas)
+	r.Like(matt, flagstaff)
+	r.Like(matt, tucson)
+	r.Like(matt, denver)
+	r.Like(matt, boulder)
+	r.Like(matt, portlandOR)
+	r.Like(matt, santaFe)
+	r.Like(matt, newYork)
+	r.Dislike(matt, phoenix)
+	r.Dislike(matt, losAngeles)
+	r.Dislike(matt, lasVegas)
 
-	rater.Like(bekah, flagstaff)
-	rater.Like(bekah, tucson)
-	rater.Like(bekah, denver)
-	rater.Like(bekah, boulder)
-	rater.Like(bekah, portlandOR)
-	rater.Like(bekah, tacoma)
-	rater.Like(bekah, seattle)
-	rater.Like(bekah, newYork)
-	rater.Dislike(bekah, phoenix)
-	rater.Dislike(bekah, losAngeles)
-	rater.Dislike(bekah, lasVegas)
-	rater.Dislike(bekah, sacramento)
+	r.Like(bekah, flagstaff)
+	r.Like(bekah, tucson)
+	r.Like(bekah, denver)
+	r.Like(bekah, boulder)
+	r.Like(bekah, portlandOR)
+	r.Like(bekah, tacoma)
+	r.Like(bekah, seattle)
+	r.Like(bekah, newYork)
+	r.Dislike(bekah, phoenix)
+	r.Dislike(bekah, losAngeles)
+	r.Dislike(bekah, lasVegas)
+	r.Dislike(bekah, sacramento)
 
-	rater.Like(bill, flagstaff)
-	rater.Like(bill, denver)
-	rater.Like(bill, portlandOR)
-	rater.Like(bill, philadelphia)
-	rater.Like(bill, princeton)
-	rater.Like(bill, newYork)
-	rater.Like(bill, phoenix)
-	rater.Like(bill, losAngeles)
-	rater.Like(bill, lasVegas)
-	rater.Dislike(bill, tucson)
-	rater.Dislike(bill, santaFe)
-	rater.Dislike(bill, pittsburgh)
-	rater.Dislike(bill, seattle)
-	rater.Dislike(bill, boulder)
+	r.Like(bill, flagstaff)
+	r.Like(bill, denver)
+	r.Like(bill, portlandOR)
+	r.Like(bill, philadelphia)
+	r.Like(bill, princeton)
+	r.Like(bill, newYork)
+	r.Like(bill, phoenix)
+	r.Like(bill, losAngeles)
+	r.Like(bill, lasVegas)
+	r.Dislike(bill, tucson)
+	r.Dislike(bill, santaFe)
+	r.Dislike(bill, pittsburgh)
+	r.Dislike(bill, seattle)
+	r.Dislike(bill, boulder)
 
-	rater.Like(megan, flagstaff)
-	rater.Like(megan, philadelphia)
-	rater.Like(megan, princeton)
-	rater.Like(megan, newYork)
-	rater.Like(megan, phoenix)
-	rater.Dislike(megan, tucson)
+	r.Like(megan, flagstaff)
+	r.Like(megan, philadelphia)
+	r.Like(megan, princeton)
+	r.Like(megan, newYork)
+	r.Like(megan, phoenix)
+	r.Dislike(megan, tucson)
 
-	if err := rater.UpdateSuggestions(niko); err != nil {
+	if err := r.UpdateSuggestions(niko); err != nil {
 		t.Errorf("Error: %s", err)
 	}
 
 	// GetSuggestions should return nothing at this point
-	nikoSuggestions, err = rater.GetSuggestions(niko)
+	nikoSuggestions, err = r.GetSuggestions(niko)
 	if err != nil {
 		t.Errorf("Error: %s", err)
 	}
